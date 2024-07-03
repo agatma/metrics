@@ -3,9 +3,9 @@ package rest
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
+	"metrics/internal/server/adapters/api"
 	"net/http"
 	"os"
 	"os/signal"
@@ -13,9 +13,9 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"go.uber.org/zap"
 
-	"metrics/internal/server/adapters/api/middleware"
 	"metrics/internal/server/config"
 	"metrics/internal/server/core/domain"
 	"metrics/internal/server/logger"
@@ -25,14 +25,19 @@ const (
 	metricType  = "metricType"
 	metricValue = "metricValue"
 	metricName  = "metricName"
+
+	contentType   = "Content-Type"
+	serverTimeout = 3
 )
 
 type MetricService interface {
-	GetMetric(mType, mName string) (*domain.Metric, error)
-	GetMetricValue(mType, mName string) (string, error)
-	SetMetric(m *domain.Metric) (*domain.Metric, error)
-	SetMetricValue(m *domain.SetMetricRequest) (*domain.Metric, error)
-	GetAllMetrics() (domain.MetricsList, error)
+	GetMetric(ctx context.Context, mType, mName string) (*domain.Metric, error)
+	GetMetricValue(ctx context.Context, mType, mName string) (string, error)
+	SetMetric(ctx context.Context, m *domain.Metric) (*domain.Metric, error)
+	SetMetrics(ctx context.Context, metrics domain.MetricsList) (domain.MetricsList, error)
+	SetMetricValue(ctx context.Context, m *domain.SetMetricRequest) (*domain.Metric, error)
+	GetAllMetrics(ctx context.Context) (domain.MetricsList, error)
+	Ping(ctx context.Context) error
 }
 
 type handler struct {
@@ -65,9 +70,10 @@ func NewAPI(metricService MetricService, cfg *config.Config) *API {
 		metricService: metricService,
 	}
 	r := chi.NewRouter()
-	r.Use(middleware.LoggingRequestMiddleware)
-	r.Use(middleware.CompressRequestMiddleware)
-	r.Use(middleware.CompressResponseMiddleware)
+	r.Use(api.LoggingRequestMiddleware)
+	r.Use(api.CompressRequestMiddleware)
+	r.Use(api.CompressResponseMiddleware)
+	r.Use(middleware.Timeout(serverTimeout * time.Second))
 	r.Route("/update", func(r chi.Router) {
 		r.Post("/", h.SetMetric)
 		r.Post("/{metricType}/{metricName}/{metricValue}", h.SetMetricValue)
@@ -76,33 +82,14 @@ func NewAPI(metricService MetricService, cfg *config.Config) *API {
 		r.Post("/", h.GetMetric)
 		r.Get("/{metricType}/{metricName}", h.GetMetricValue)
 	})
+	r.Post("/updates/", h.SetMetrics)
 	r.Get("/", h.GetAllMetrics)
+	r.Get("/ping", h.Ping)
 	return &API{
 		srv: &http.Server{
-			Addr:         cfg.Address,
-			Handler:      r,
-			ReadTimeout:  time.Second,
-			WriteTimeout: time.Second,
+			Addr:    cfg.Address,
+			Handler: r,
 		},
-	}
-}
-
-func handleSetMetricError(w http.ResponseWriter, err error) {
-	switch {
-	case errors.Is(err, domain.ErrItemNotFound):
-		http.Error(w, err.Error(), http.StatusNotFound)
-	case errors.Is(err, domain.ErrIncorrectMetricType) || errors.Is(err, domain.ErrIncorrectMetricValue):
-		http.Error(w, err.Error(), http.StatusBadRequest)
-	default:
-		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-	}
-}
-
-func handleGetMetricError(w http.ResponseWriter, err error) {
-	if errors.Is(err, domain.ErrIncorrectMetricType) || errors.Is(err, domain.ErrItemNotFound) {
-		http.Error(w, domain.ErrItemNotFound.Error(), http.StatusNotFound)
-	} else {
-		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 	}
 }
 
@@ -110,7 +97,7 @@ func (h *handler) SetMetricValue(w http.ResponseWriter, req *http.Request) {
 	mType := chi.URLParam(req, metricType)
 	mName := chi.URLParam(req, metricName)
 	mValue := chi.URLParam(req, metricValue)
-	_, err := h.metricService.SetMetricValue(&domain.SetMetricRequest{
+	_, err := h.metricService.SetMetricValue(req.Context(), &domain.SetMetricRequest{
 		ID:    mName,
 		MType: mType,
 		Value: mValue,
@@ -148,14 +135,14 @@ func (h *handler) SetMetric(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	metric, err := h.metricService.SetMetric(&m)
+	metric, err := h.metricService.SetMetric(req.Context(), &m)
 
 	if err != nil {
 		logger.Log.Error("failed to set metric", zap.Error(err))
 		handleSetMetricError(w, err)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set(contentType, "application/json")
 
 	if err = json.NewEncoder(w).Encode(metric); err != nil {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
@@ -164,9 +151,44 @@ func (h *handler) SetMetric(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
+func (h *handler) SetMetrics(w http.ResponseWriter, req *http.Request) {
+	var metricsIn domain.MetricsList
+	if err := json.NewDecoder(req.Body).Decode(&metricsIn); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	_, err := io.Copy(io.Discard, req.Body)
+	if err != nil {
+		logger.Log.Info("cannot read body", zap.Error(err))
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	err = req.Body.Close()
+	if err != nil {
+		logger.Log.Info("cannot close body", zap.Error(err))
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+
+	metricsOut, err := h.metricService.SetMetrics(req.Context(), metricsIn)
+
+	if err != nil {
+		logger.Log.Error("failed to set metric", zap.Error(err))
+		handleSetMetricError(w, err)
+		return
+	}
+	w.Header().Set(contentType, "application/json")
+
+	if err = json.NewEncoder(w).Encode(metricsOut); err != nil {
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		logger.Log.Error("error encoding response", zap.Error(err))
+		return
+	}
+}
+
 func (h *handler) GetMetricValue(w http.ResponseWriter, req *http.Request) {
 	mType, mName := chi.URLParam(req, metricType), chi.URLParam(req, metricName)
-	metricValue, err := h.metricService.GetMetricValue(mType, mName)
+	metricValue, err := h.metricService.GetMetricValue(req.Context(), mType, mName)
 	if err != nil {
 		logger.Log.Error("failed to get metric",
 			zap.String(metricType, mType),
@@ -188,7 +210,7 @@ func (h *handler) GetMetric(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	metric, err := h.metricService.GetMetric(m.MType, m.ID)
+	metric, err := h.metricService.GetMetric(req.Context(), m.MType, m.ID)
 
 	if err != nil {
 		logger.Log.Error("failed to get metric", zap.Error(err))
@@ -196,19 +218,19 @@ func (h *handler) GetMetric(w http.ResponseWriter, req *http.Request) {
 
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set(contentType, "application/json")
 	enc := json.NewEncoder(w)
 	if err := enc.Encode(metric); err != nil {
-		http.Error(w, "", http.StatusInternalServerError)
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		logger.Log.Error("error encoding response", zap.Error(err))
 		return
 	}
 }
 
 func (h *handler) GetAllMetrics(w http.ResponseWriter, req *http.Request) {
-	metrics, err := h.metricService.GetAllMetrics()
+	metrics, err := h.metricService.GetAllMetrics(req.Context())
 	if err != nil {
-		http.Error(w, "", http.StatusInternalServerError)
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		logger.Log.Error("failed to get all metrics", zap.Error(err))
 		return
 	}
@@ -226,9 +248,18 @@ func (h *handler) GetAllMetrics(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 	html += "</ul></body></html>"
-	w.Header().Set("Content-Type", "text/html")
+	w.Header().Set(contentType, "text/html")
 	if _, err := w.Write([]byte(html)); err != nil {
 		w.WriteHeader(http.StatusOK)
+		return
+	}
+}
+
+func (h *handler) Ping(w http.ResponseWriter, req *http.Request) {
+	err := h.metricService.Ping(req.Context())
+	if err != nil {
+		logger.Log.Info("failed to ping storage", zap.Error(err))
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
 }

@@ -99,7 +99,11 @@ func TestHandler_SetMetricValueSuccess(t *testing.T) {
 			}()
 			assert.Equal(t, tt.want.statusCode, result.StatusCode)
 
-			value, _ := h.metricService.GetMetricValue(tt.metric.Type, tt.metric.Name)
+			value, err := h.metricService.GetMetricValue(context.TODO(), tt.metric.Type, tt.metric.Name)
+			if err != nil {
+				t.Error(err)
+				return
+			}
 			assert.Equal(t, tt.metric.Value, value)
 		})
 	}

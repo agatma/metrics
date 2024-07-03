@@ -9,6 +9,9 @@ import (
 
 	"metrics/internal/agent/core/domain"
 	"metrics/internal/agent/core/handlers"
+	"metrics/internal/shared-kernel/retrying"
+
+	"github.com/avast/retry-go"
 )
 
 type AgentMetricStorage interface {
@@ -127,7 +130,18 @@ func (a *AgentMetricService) SendMetrics(host string) error {
 			MType: domain.Gauge,
 			Value: &gaugeValue,
 		}
-		err = handlers.SendMetrics(host, &request)
+		err = retry.Do(
+			func() error {
+				err = handlers.SendMetrics(host, &request)
+				if err != nil {
+					return fmt.Errorf("failed to send metrics: %w", err)
+				}
+				return nil
+			},
+			retry.Attempts(retrying.Attempts),
+			retry.DelayType(retrying.DelayType),
+			retry.OnRetry(retrying.OnRetry),
+		)
 		if err != nil {
 			return fmt.Errorf("error occured during sending metrics: %w", err)
 		}

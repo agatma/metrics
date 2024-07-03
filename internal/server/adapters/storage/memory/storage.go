@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"context"
 	"sync"
 
 	"metrics/internal/server/core/domain"
@@ -18,7 +19,7 @@ func NewStorage(cfg *Config) (*MetricStorage, error) {
 	}, nil
 }
 
-func (s *MetricStorage) GetMetric(mType, mName string) (*domain.Metric, error) {
+func (s *MetricStorage) GetMetric(ctx context.Context, mType, mName string) (*domain.Metric, error) {
 	s.mux.Lock()
 	defer s.mux.Unlock()
 	value, found := s.metrics[domain.Key{MType: mType, ID: mName}]
@@ -33,39 +34,23 @@ func (s *MetricStorage) GetMetric(mType, mName string) (*domain.Metric, error) {
 	}, nil
 }
 
-func (s *MetricStorage) SetMetric(m *domain.Metric) (*domain.Metric, error) {
+func (s *MetricStorage) SetMetric(ctx context.Context, m *domain.Metric) (*domain.Metric, error) {
 	s.mux.Lock()
 	defer s.mux.Unlock()
-	key := domain.Key{MType: m.MType, ID: m.ID}
-	if m.MType == domain.Counter {
-		value, found := s.metrics[key]
-		if found {
-			*value.Delta += *m.Delta
-			s.metrics[key] = domain.Value{Delta: value.Delta}
-			return &domain.Metric{
-				ID:    m.ID,
-				MType: m.MType,
-				Delta: value.Delta,
-			}, nil
-		} else {
-			s.metrics[key] = domain.Value{Delta: m.Delta}
-			return &domain.Metric{
-				ID:    m.ID,
-				MType: m.MType,
-				Delta: m.Delta,
-			}, nil
-		}
-	} else {
-		s.metrics[key] = domain.Value{Value: m.Value}
-		return &domain.Metric{
-			ID:    m.ID,
-			MType: m.MType,
-			Value: m.Value,
-		}, nil
-	}
+	s.saveMetric(m)
+	return m, nil
 }
 
-func (s *MetricStorage) GetAllMetrics() (domain.MetricsList, error) {
+func (s *MetricStorage) SetMetrics(ctx context.Context, metrics domain.MetricsList) (domain.MetricsList, error) {
+	s.mux.Lock()
+	defer s.mux.Unlock()
+	for _, metric := range metrics {
+		s.saveMetric(&metric)
+	}
+	return metrics, nil
+}
+
+func (s *MetricStorage) GetAllMetrics(ctx context.Context) (domain.MetricsList, error) {
 	s.mux.Lock()
 	defer s.mux.Unlock()
 	metrics := make(domain.MetricsList, 0)
@@ -78,4 +63,23 @@ func (s *MetricStorage) GetAllMetrics() (domain.MetricsList, error) {
 		})
 	}
 	return metrics, nil
+}
+
+func (s *MetricStorage) Ping(ctx context.Context) error {
+	return nil
+}
+
+func (s *MetricStorage) saveMetric(m *domain.Metric) {
+	key := domain.Key{MType: m.MType, ID: m.ID}
+	if m.MType == domain.Counter {
+		value, found := s.metrics[key]
+		if found {
+			*value.Delta += *m.Delta
+			s.metrics[key] = domain.Value{Delta: value.Delta}
+		} else {
+			s.metrics[key] = domain.Value{Delta: m.Delta}
+		}
+	} else {
+		s.metrics[key] = domain.Value{Value: m.Value}
+	}
 }

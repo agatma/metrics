@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"metrics/internal/server/adapters/storage/database"
 	"net/http"
 
 	"metrics/internal/server/adapters/api/rest"
@@ -54,7 +55,19 @@ func run() error {
 }
 
 func initMetricStorage(cfg *config.Config) (storage.MetricStorage, error) {
-	if cfg.FileStoragePath == "" {
+	switch {
+	case cfg.DatabaseDSN != "":
+		metricStorage, err := storage.NewStorage(storage.Config{
+			Database: &database.Config{
+				DSN: cfg.DatabaseDSN,
+			},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to init db storage %w", err)
+		}
+		logger.Log.Info("initialize db storage")
+		return metricStorage, nil
+	case cfg.FileStoragePath == "":
 		metricStorage, err := storage.NewStorage(storage.Config{
 			Memory: &memory.Config{},
 		})
@@ -63,7 +76,7 @@ func initMetricStorage(cfg *config.Config) (storage.MetricStorage, error) {
 		}
 		logger.Log.Info("initialize memory storage")
 		return metricStorage, nil
-	} else {
+	default:
 		metricStorage, err := storage.NewStorage(storage.Config{
 			File: &file.Config{
 				Filepath:      cfg.FileStoragePath,

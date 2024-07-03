@@ -14,6 +14,7 @@ const (
 type Config struct {
 	Address         string `env:"ADDRESS"`
 	StoreInterval   int    `env:"STORE_INTERVAL"`
+	DatabaseDSN     string `env:"DATABASE_DSN"`
 	FileStoragePath string `env:"FILE_STORAGE_PATH"`
 	Restore         bool   `env:"RESTORE"`
 	LogLevel        string
@@ -24,6 +25,7 @@ func NewConfig() (*Config, error) {
 	flag.StringVar(&cfg.Address, "a", ":8080", "port to run server")
 	flag.IntVar(&cfg.StoreInterval, "i", storeInterval, "time interval (seconds) to backup server data")
 	flag.StringVar(&cfg.FileStoragePath, "f", "/tmp/metrics-db.json", "where to store server data")
+	flag.StringVar(&cfg.DatabaseDSN, "d", "", "database dsn")
 	flag.BoolVar(&cfg.Restore, "r", true, "recover data from files")
 	flag.StringVar(&cfg.LogLevel, "l", "info", "log level")
 	flag.Parse()

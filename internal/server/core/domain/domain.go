@@ -11,6 +11,8 @@ var (
 	ErrIncorrectMetricType  = errors.New("incorrect metric value")
 	ErrIncorrectMetricValue = errors.New("incorrect metric value")
 	ErrItemNotFound         = errors.New("item not found")
+	ErrNilGaugeValue        = errors.New("gauge value is nil")
+	ErrNilCounterDelta      = errors.New("counter delta is nil")
 )
 
 type SetMetricRequest struct {
