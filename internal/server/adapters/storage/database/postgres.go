@@ -97,6 +97,13 @@ func (s *MetricStorage) SetMetric(ctx context.Context, m *domain.Metric) (*domai
 
 func (s *MetricStorage) SetMetrics(ctx context.Context, metrics domain.MetricsList) (domain.MetricsList, error) {
 	tx, err := s.db.Begin()
+	defer func() {
+		if err := tx.Rollback(); err != nil {
+			if !errors.Is(err, sql.ErrTxDone) {
+				logger.Log.Error("failed to rollback the transaction", zap.Error(err))
+			}
+		}
+	}()
 	if err != nil {
 		return nil, fmt.Errorf("%w", err)
 	}
@@ -105,16 +112,11 @@ func (s *MetricStorage) SetMetrics(ctx context.Context, metrics domain.MetricsLi
 		case domain.Gauge:
 			err = retrying.ExecContext(
 				ctx,
-				s.db,
+				tx,
 				`INSERT INTO metrics (name, type, value) VALUES ($1, $2, $3)`,
 				m.ID, m.MType, *m.Value,
 			)
 			if err != nil {
-				if txErr := tx.Rollback(); txErr != nil {
-					if !errors.Is(txErr, sql.ErrTxDone) {
-						logger.Log.Error("failed to rollback the transaction", zap.Error(txErr))
-					}
-				}
 				return nil, fmt.Errorf("%w", err)
 			}
 
@@ -129,16 +131,11 @@ func (s *MetricStorage) SetMetrics(ctx context.Context, metrics domain.MetricsLi
 			}
 			err = retrying.ExecContext(
 				ctx,
-				s.db,
+				tx,
 				`INSERT INTO metrics (name, type, delta) VALUES ($1, $2, $3)`,
 				m.ID, m.MType, *m.Delta,
 			)
 			if err != nil {
-				if txErr := tx.Rollback(); txErr != nil {
-					if !errors.Is(txErr, sql.ErrTxDone) {
-						logger.Log.Error("failed to rollback the transaction", zap.Error(txErr))
-					}
-				}
 				return nil, fmt.Errorf("%w", err)
 			}
 		default:

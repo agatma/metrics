@@ -27,7 +27,7 @@ const (
 	metricName  = "metricName"
 
 	contentType   = "Content-Type"
-	serverTimeout = 3
+	serverTimeout = 30
 )
 
 type MetricService interface {
