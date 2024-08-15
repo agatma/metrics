@@ -27,7 +27,7 @@ func NewConfig() (*Config, error) {
 	flag.IntVar(&cfg.StoreInterval, "i", storeInterval, "time interval (seconds) to backup server data")
 	flag.StringVar(&cfg.FileStoragePath, "f", "/tmp/metrics-db.json", "where to store server data")
 	flag.StringVar(&cfg.DatabaseDSN, "d", "", "database dsn")
-	flag.StringVar(&cfg.Key, "k", "jfqfnuuqo", "hashing key")
+	flag.StringVar(&cfg.Key, "k", "", "hashing key")
 	flag.BoolVar(&cfg.Restore, "r", true, "recover data from files")
 	flag.StringVar(&cfg.LogLevel, "l", "info", "log level")
 	flag.Parse()

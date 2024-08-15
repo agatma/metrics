@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"fmt"
 	"net/http"
 )
 
@@ -26,11 +27,11 @@ func (hw Writer) Write(b []byte) (int, error) {
 	if hw.RHash != "" && hw.Key != "" {
 		hw.Header().Set(Header, getHash(b, hw.Key))
 	}
-	return hw.ResponseWriter.Write(b)
-}
-
-func CheckHash(data []byte, key string, requestHash string) bool {
-	return hmac.Equal([]byte(getHash(data, key)), []byte(requestHash))
+	n, err := hw.ResponseWriter.Write(b)
+	if err != nil {
+		return 0, fmt.Errorf("%w", err)
+	}
+	return n, nil
 }
 
 func getHash(data []byte, key string) string {

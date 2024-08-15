@@ -122,10 +122,6 @@ func (h *Handler) WithHash(next http.Handler) http.Handler {
 				return
 			}
 			r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
-			if !hash.CheckHash(bodyBytes, h.config.Key, r.Header.Get(hash.Header)) {
-				http.Error(w, "incorrect hash value", http.StatusBadRequest)
-				return
-			}
 		}
 		hw := &hash.Writer{
 			ResponseWriter: w,
