@@ -88,7 +88,7 @@ func TestHandler_SetMetricValueSuccess(t *testing.T) {
 			rctx.URLParams.Add("metricValue", tt.metric.Value)
 			r = r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
 
-			h := handler{
+			h := Handler{
 				metricService: metricService,
 			}
 			h.SetMetricValue(w, r)
@@ -193,7 +193,7 @@ func TestHandler_SetMetricValueFailed(t *testing.T) {
 			rctx.URLParams.Add("metricValue", tt.metric.Value)
 			r = r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
 
-			h := handler{
+			h := Handler{
 				metricService: metricService,
 			}
 			h.SetMetricValue(w, r)

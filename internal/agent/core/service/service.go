@@ -7,11 +7,12 @@ import (
 	"runtime"
 	"strconv"
 
+	"github.com/avast/retry-go"
+
+	"metrics/internal/agent/config"
 	"metrics/internal/agent/core/domain"
 	"metrics/internal/agent/core/handlers"
 	"metrics/internal/shared-kernel/retrying"
-
-	"github.com/avast/retry-go"
 )
 
 type AgentMetricStorage interface {
@@ -116,7 +117,7 @@ func (a *AgentMetricService) getAllMetrics(request *domain.GetAllMetricsRequest)
 	}
 }
 
-func (a *AgentMetricService) SendMetrics(host string) error {
+func (a *AgentMetricService) SendMetrics(cfg *config.Config) error {
 	response := a.getAllMetrics(&domain.GetAllMetricsRequest{
 		MetricType: domain.Gauge,
 	})
@@ -132,7 +133,7 @@ func (a *AgentMetricService) SendMetrics(host string) error {
 		}
 		err = retry.Do(
 			func() error {
-				err = handlers.SendMetrics(host, &request)
+				err = handlers.SendMetrics(cfg, &request)
 				if err != nil {
 					return fmt.Errorf("failed to send metrics: %w", err)
 				}
@@ -163,7 +164,7 @@ func (a *AgentMetricService) SendMetrics(host string) error {
 			MType: domain.Counter,
 			Delta: &counterInt64Value,
 		}
-		err = handlers.SendMetrics(host, &request)
+		err = handlers.SendMetrics(cfg, &request)
 		if err != nil {
 			return fmt.Errorf("error occured during sending metrics: %w", err)
 		}

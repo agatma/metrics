@@ -3,6 +3,7 @@ package config
 import (
 	"flag"
 	"fmt"
+	"strings"
 
 	"github.com/caarlos0/env/v11"
 )
@@ -16,7 +17,9 @@ type Config struct {
 	Address        string `env:"ADDRESS"`
 	ReportInterval int    `env:"REPORT_INTERVAL"`
 	PollInterval   int    `env:"POLL_INTERVAL"`
+	Key            string `env:"KEY"`
 	LogLevel       string
+	Host           string
 }
 
 func NewConfig() (*Config, error) {
@@ -25,10 +28,17 @@ func NewConfig() (*Config, error) {
 	flag.IntVar(&cfg.PollInterval, "p", defaultPollInterval, " poll interval ")
 	flag.IntVar(&cfg.ReportInterval, "r", defaultReportInterval, " report interval ")
 	flag.StringVar(&cfg.LogLevel, "l", "info", "log level")
+	flag.StringVar(&cfg.Key, "k", "", "hashing key")
 	flag.Parse()
 	err := env.Parse(&cfg)
 	if err != nil {
 		return &cfg, fmt.Errorf("failed to get config for worker: %w", err)
 	}
+	address := strings.Split(cfg.Address, ":")
+	port := "8080"
+	if len(address) > 1 {
+		port = address[1]
+	}
+	cfg.Host = "http://localhost:" + port
 	return &cfg, nil
 }
