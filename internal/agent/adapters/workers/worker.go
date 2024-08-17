@@ -1,6 +1,8 @@
 package workers
 
 import (
+	"fmt"
+
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
@@ -8,6 +10,8 @@ import (
 	"metrics/internal/agent/core/domain"
 	"metrics/internal/agent/logger"
 )
+
+const metrics = 100
 
 type AgentMetricService interface {
 	CollectMetrics(pollInterval int)
@@ -28,7 +32,7 @@ func NewAgentWorker(agentMetricService AgentMetricService, cfg *config.Config) *
 }
 
 func (a *AgentWorker) Run() error {
-	jobs := make(chan domain.MetricRequestJSON, 100)
+	jobs := make(chan domain.MetricRequestJSON, metrics)
 
 	go a.agentMetricService.CollectMetrics(a.config.PollInterval)
 	go a.agentMetricService.ReportMetrics(a.config.ReportInterval, jobs)
@@ -38,14 +42,14 @@ func (a *AgentWorker) Run() error {
 		g.Go(func() error {
 			err := a.agentMetricService.SendMetrics(a.config, jobs)
 			if err != nil {
-				return err
+				return fmt.Errorf("%w", err)
 			}
 			return nil
 		})
 	}
 	if err := g.Wait(); err != nil {
 		logger.Log.Error("error occurred during sending metrics", zap.Error(err))
-		return err
+		return fmt.Errorf("%w", err)
 	}
 	return nil
 }
