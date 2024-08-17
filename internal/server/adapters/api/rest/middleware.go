@@ -121,6 +121,10 @@ func (h *Handler) WithHash(next http.Handler) http.Handler {
 				http.Error(w, "error reading request body", http.StatusInternalServerError)
 				return
 			}
+			if hash.Encode(bodyBytes, h.config.Key) != r.Header.Get(hash.Header) {
+				http.Error(w, "incorrect hash", http.StatusBadRequest)
+				return
+			}
 			r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 		}
 		hw := &hash.Writer{

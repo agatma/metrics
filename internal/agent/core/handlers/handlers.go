@@ -30,7 +30,7 @@ func SendMetrics(cfg *config.Config, request *domain.MetricRequestJSON) error {
 		SetHeader("Content-Encoding", `gzip`).
 		SetHeader("Accept-Encoding", `gzip`)
 	if cfg.Key != "" {
-		req.SetHeader(hash.Header, hash.Encode(buf, []byte(cfg.Key)))
+		req.SetHeader(hash.Header, hash.Encode(buf, cfg.Key))
 	}
 	resp, err := req.SetBody(buf).Post(cfg.Host + "/update/")
 	if err != nil {

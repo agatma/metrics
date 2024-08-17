@@ -73,9 +73,9 @@ func NewAPI(metricService MetricService, cfg *config.Config) *API {
 	r := chi.NewRouter()
 
 	r.Use(h.LoggingRequestMiddleware)
+	r.Use(h.WithHash)
 	r.Use(h.CompressRequestMiddleware)
 	r.Use(h.CompressResponseMiddleware)
-	r.Use(h.WithHash)
 	r.Use(middleware.Timeout(serverTimeout * time.Second))
 
 	r.Route("/update", func(r chi.Router) {
