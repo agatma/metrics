@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/avast/retry-go"
+	"github.com/shirou/gopsutil/v3/cpu"
+	"github.com/shirou/gopsutil/v3/mem"
 	"go.uber.org/zap"
 
 	"metrics/internal/agent/config"
@@ -42,34 +44,46 @@ func NewAgentMetricService(
 func (a *AgentMetricService) collectMemStats() domain.Metrics {
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
+
+	vm, err := mem.VirtualMemory()
+	if err != nil {
+		logger.Log.Error("failed to get vm metric", zap.Error(err))
+	}
+	cpuMetric, err := cpu.Percent(time.Millisecond, false)
+	if err != nil {
+		logger.Log.Error("failed to get cpu metric", zap.Error(err))
+	}
 	metrics := map[string]string{
-		"Alloc":         strconv.FormatUint(m.Alloc, 10),
-		"BuckHashSys":   strconv.FormatUint(m.BuckHashSys, 10),
-		"Frees":         strconv.FormatUint(m.Frees, 10),
-		"GCCPUFraction": strconv.FormatFloat(m.GCCPUFraction, 'f', 6, 64),
-		"GCSys":         strconv.FormatUint(m.GCSys, 10),
-		"HeapAlloc":     strconv.FormatUint(m.HeapAlloc, 10),
-		"HeapIdle":      strconv.FormatUint(m.HeapIdle, 10),
-		"HeapInuse":     strconv.FormatUint(m.HeapInuse, 10),
-		"HeapObjects":   strconv.FormatUint(m.HeapObjects, 10),
-		"HeapReleased":  strconv.FormatUint(m.HeapReleased, 10),
-		"HeapSys":       strconv.FormatUint(m.HeapSys, 10),
-		"LastGC":        strconv.FormatUint(m.LastGC, 10),
-		"Lookups":       strconv.FormatUint(m.Lookups, 10),
-		"MCacheInuse":   strconv.FormatUint(m.MCacheInuse, 10),
-		"MCacheSys":     strconv.FormatUint(m.MCacheSys, 10),
-		"MSpanInuse":    strconv.FormatUint(m.MSpanInuse, 10),
-		"MSpanSys":      strconv.FormatUint(m.MSpanSys, 10),
-		"Mallocs":       strconv.FormatUint(m.Mallocs, 10),
-		"NextGC":        strconv.FormatUint(m.NextGC, 10),
-		"NumForcedGC":   strconv.FormatUint(uint64(m.NumForcedGC), 10),
-		"NumGC":         strconv.FormatUint(uint64(m.NumGC), 10),
-		"OtherSys":      strconv.FormatUint(m.OtherSys, 10),
-		"PauseTotalNs":  strconv.FormatUint(m.PauseTotalNs, 10),
-		"StackInuse":    strconv.FormatUint(m.StackInuse, 10),
-		"StackSys":      strconv.FormatUint(m.StackSys, 10),
-		"Sys":           strconv.FormatUint(m.Sys, 10),
-		"TotalAlloc":    strconv.FormatUint(m.TotalAlloc, 10),
+		"Alloc":           strconv.FormatUint(m.Alloc, 10),
+		"BuckHashSys":     strconv.FormatUint(m.BuckHashSys, 10),
+		"CPUutilization1": strconv.FormatFloat(cpuMetric[0], 'f', 6, 64),
+		"Frees":           strconv.FormatUint(m.Frees, 10),
+		"FreeMemory":      strconv.FormatFloat(float64(vm.Free), 'f', 6, 64),
+		"GCCPUFraction":   strconv.FormatFloat(m.GCCPUFraction, 'f', 6, 64),
+		"GCSys":           strconv.FormatUint(m.GCSys, 10),
+		"HeapAlloc":       strconv.FormatUint(m.HeapAlloc, 10),
+		"HeapIdle":        strconv.FormatUint(m.HeapIdle, 10),
+		"HeapInuse":       strconv.FormatUint(m.HeapInuse, 10),
+		"HeapObjects":     strconv.FormatUint(m.HeapObjects, 10),
+		"HeapReleased":    strconv.FormatUint(m.HeapReleased, 10),
+		"HeapSys":         strconv.FormatUint(m.HeapSys, 10),
+		"LastGC":          strconv.FormatUint(m.LastGC, 10),
+		"Lookups":         strconv.FormatUint(m.Lookups, 10),
+		"MCacheInuse":     strconv.FormatUint(m.MCacheInuse, 10),
+		"MCacheSys":       strconv.FormatUint(m.MCacheSys, 10),
+		"MSpanInuse":      strconv.FormatUint(m.MSpanInuse, 10),
+		"MSpanSys":        strconv.FormatUint(m.MSpanSys, 10),
+		"Mallocs":         strconv.FormatUint(m.Mallocs, 10),
+		"NextGC":          strconv.FormatUint(m.NextGC, 10),
+		"NumForcedGC":     strconv.FormatUint(uint64(m.NumForcedGC), 10),
+		"NumGC":           strconv.FormatUint(uint64(m.NumGC), 10),
+		"OtherSys":        strconv.FormatUint(m.OtherSys, 10),
+		"PauseTotalNs":    strconv.FormatUint(m.PauseTotalNs, 10),
+		"StackInuse":      strconv.FormatUint(m.StackInuse, 10),
+		"StackSys":        strconv.FormatUint(m.StackSys, 10),
+		"Sys":             strconv.FormatUint(m.Sys, 10),
+		"TotalAlloc":      strconv.FormatUint(m.TotalAlloc, 10),
+		"TotalMemory":     strconv.FormatFloat(float64(vm.Total), 'f', 6, 64),
 	}
 	return domain.Metrics{
 		Values: metrics,
