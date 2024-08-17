@@ -6,12 +6,15 @@ import (
 	"math/rand"
 	"runtime"
 	"strconv"
+	"time"
 
 	"github.com/avast/retry-go"
+	"go.uber.org/zap"
 
 	"metrics/internal/agent/config"
 	"metrics/internal/agent/core/domain"
 	"metrics/internal/agent/core/handlers"
+	"metrics/internal/agent/logger"
 	"metrics/internal/shared-kernel/retrying"
 )
 
@@ -73,35 +76,42 @@ func (a *AgentMetricService) collectMemStats() domain.Metrics {
 	}
 }
 
-func (a *AgentMetricService) UpdateMetrics(pollCount int) error {
-	metrics := a.collectMemStats()
-	for metricName, metricValue := range metrics.Values {
+func (a *AgentMetricService) CollectMetrics(pollInterval int) {
+	collectMetricsTicker := time.NewTicker(time.Duration(pollInterval) * time.Second)
+	defer collectMetricsTicker.Stop()
+
+	pollCount := 0
+	for t := range collectMetricsTicker.C {
+		metrics := a.collectMemStats()
+		for metricName, metricValue := range metrics.Values {
+			response := a.gaugeAgentStorage.SetMetricValue(&domain.SetMetricRequest{
+				MetricType:  domain.Gauge,
+				MetricName:  metricName,
+				MetricValue: metricValue,
+			})
+			if response.Error != nil {
+				logger.Log.Error("failed to update metric", zap.Error(response.Error))
+			}
+		}
 		response := a.gaugeAgentStorage.SetMetricValue(&domain.SetMetricRequest{
 			MetricType:  domain.Gauge,
-			MetricName:  metricName,
-			MetricValue: metricValue,
+			MetricName:  domain.RandomValue,
+			MetricValue: strconv.FormatFloat(rand.Float64(), 'f', 6, 64),
 		})
 		if response.Error != nil {
-			return response.Error
+			logger.Log.Error("failed to update random value", zap.Error(response.Error))
 		}
+		pollCount++
+		response = a.counterAgentStorage.SetMetricValue(&domain.SetMetricRequest{
+			MetricType:  domain.Counter,
+			MetricName:  domain.PollCount,
+			MetricValue: strconv.Itoa(pollCount),
+		})
+		if response.Error != nil {
+			logger.Log.Error("failed to update pollCount", zap.Error(response.Error))
+		}
+		logger.Log.Info("metrics collected", zap.Time("time", t))
 	}
-	response := a.gaugeAgentStorage.SetMetricValue(&domain.SetMetricRequest{
-		MetricType:  domain.Gauge,
-		MetricName:  domain.RandomValue,
-		MetricValue: strconv.FormatFloat(rand.Float64(), 'f', 6, 64),
-	})
-	if response.Error != nil {
-		return response.Error
-	}
-	response = a.counterAgentStorage.SetMetricValue(&domain.SetMetricRequest{
-		MetricType:  domain.Counter,
-		MetricName:  domain.PollCount,
-		MetricValue: strconv.Itoa(pollCount),
-	})
-	if response.Error != nil {
-		return response.Error
-	}
-	return nil
 }
 
 func (a *AgentMetricService) getAllMetrics(request *domain.GetAllMetricsRequest) *domain.GetAllMetricsResponse {
@@ -117,24 +127,59 @@ func (a *AgentMetricService) getAllMetrics(request *domain.GetAllMetricsRequest)
 	}
 }
 
-func (a *AgentMetricService) SendMetrics(cfg *config.Config) error {
-	response := a.getAllMetrics(&domain.GetAllMetricsRequest{
-		MetricType: domain.Gauge,
-	})
-	for metricName, metricValue := range response.Values {
-		gaugeValue, err := strconv.ParseFloat(metricValue, 64)
-		if err != nil {
-			return fmt.Errorf("error occured during parsing metrics: %w", err)
+func (a *AgentMetricService) ReportMetrics(reportInterval int, jobs chan<- domain.MetricRequestJSON) {
+	reportMetricsTicker := time.NewTicker(time.Duration(reportInterval) * time.Second)
+	defer reportMetricsTicker.Stop()
+	for t := range reportMetricsTicker.C {
+		response := a.getAllMetrics(&domain.GetAllMetricsRequest{
+			MetricType: domain.Gauge,
+		})
+		if response.Error != nil {
+			logger.Log.Error("error occured during getting metrics", zap.Error(response.Error))
 		}
-		request := domain.MetricRequestJSON{
-			ID:    metricName,
-			MType: domain.Gauge,
-			Value: &gaugeValue,
+		for metricName, metricValue := range response.Values {
+			gaugeValue, err := strconv.ParseFloat(metricValue, 64)
+			if err != nil {
+				logger.Log.Error("error occured during parsing metrics", zap.Error(err))
+			}
+			request := domain.MetricRequestJSON{
+				ID:    metricName,
+				MType: domain.Gauge,
+				Value: &gaugeValue,
+			}
+			jobs <- request
 		}
+		response = a.getAllMetrics(&domain.GetAllMetricsRequest{
+			MetricType: domain.Counter,
+		})
+		if response.Error != nil {
+			logger.Log.Error("error occurred during getting metrics", zap.Error(response.Error))
+		}
+		for metricName, metricValue := range response.Values {
+			counterValue, err := strconv.Atoi(metricValue)
+			if err != nil {
+				logger.Log.Error("error occurred during parsing metrics", zap.Error(err))
+			}
+			counterInt64Value := int64(counterValue)
+			request := domain.MetricRequestJSON{
+				ID:    metricName,
+				MType: domain.Counter,
+				Delta: &counterInt64Value,
+			}
+			jobs <- request
+		}
+		logger.Log.Info("metrics reported", zap.Time("time", t))
+	}
+}
+
+func (a *AgentMetricService) SendMetrics(cfg *config.Config, jobs <-chan domain.MetricRequestJSON) error {
+	var err error
+	for req := range jobs {
 		err = retry.Do(
 			func() error {
-				err = handlers.SendMetrics(cfg, &request)
+				err = handlers.SendMetrics(cfg, &req)
 				if err != nil {
+					logger.Log.Error("error occurred during sending metrics", zap.Error(err))
 					return fmt.Errorf("failed to send metrics: %w", err)
 				}
 				return nil
@@ -144,29 +189,8 @@ func (a *AgentMetricService) SendMetrics(cfg *config.Config) error {
 			retry.OnRetry(retrying.OnRetry),
 		)
 		if err != nil {
-			return fmt.Errorf("error occured during sending metrics: %w", err)
-		}
-	}
-	response = a.getAllMetrics(&domain.GetAllMetricsRequest{
-		MetricType: domain.Counter,
-	})
-	if response.Error != nil {
-		return fmt.Errorf("error occured geting metrics: %w", response.Error)
-	}
-	for metricName, metricValue := range response.Values {
-		counterValue, err := strconv.Atoi(metricValue)
-		counterInt64Value := int64(counterValue)
-		if err != nil {
-			return fmt.Errorf("error occured during parsing metrics: %w", err)
-		}
-		request := domain.MetricRequestJSON{
-			ID:    metricName,
-			MType: domain.Counter,
-			Delta: &counterInt64Value,
-		}
-		err = handlers.SendMetrics(cfg, &request)
-		if err != nil {
-			return fmt.Errorf("error occured during sending metrics: %w", err)
+			logger.Log.Error("error occurred during sending metrics", zap.Error(err))
+			return fmt.Errorf("failed to send metrics: %w", err)
 		}
 	}
 	return nil

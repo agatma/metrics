@@ -17,6 +17,7 @@ type Config struct {
 	Address        string `env:"ADDRESS"`
 	ReportInterval int    `env:"REPORT_INTERVAL"`
 	PollInterval   int    `env:"POLL_INTERVAL"`
+	RateLimit      int    `env:"RATE_LIMIT"`
 	Key            string `env:"KEY"`
 	LogLevel       string
 	Host           string
@@ -27,7 +28,8 @@ func NewConfig() (*Config, error) {
 	flag.StringVar(&cfg.Address, "a", "localhost:8080", "run address")
 	flag.IntVar(&cfg.PollInterval, "p", defaultPollInterval, " poll interval ")
 	flag.IntVar(&cfg.ReportInterval, "r", defaultReportInterval, " report interval ")
-	flag.StringVar(&cfg.LogLevel, "l", "info", "log level")
+	flag.StringVar(&cfg.LogLevel, "L", "info", "log level")
+	flag.IntVar(&cfg.RateLimit, "l", 1, "rate limit")
 	flag.StringVar(&cfg.Key, "k", "", "hashing key")
 	flag.Parse()
 	err := env.Parse(&cfg)

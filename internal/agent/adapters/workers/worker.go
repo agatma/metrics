@@ -1,18 +1,18 @@
 package workers
 
 import (
-	"fmt"
-	"time"
-
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 
 	"metrics/internal/agent/config"
-	"metrics/internal/server/logger"
+	"metrics/internal/agent/core/domain"
+	"metrics/internal/agent/logger"
 )
 
 type AgentMetricService interface {
-	UpdateMetrics(pollCount int) error
-	SendMetrics(*config.Config) error
+	CollectMetrics(pollInterval int)
+	ReportMetrics(reportInterval int, jobs chan<- domain.MetricRequestJSON)
+	SendMetrics(cfg *config.Config, jobs <-chan domain.MetricRequestJSON) error
 }
 
 type AgentWorker struct {
@@ -28,23 +28,24 @@ func NewAgentWorker(agentMetricService AgentMetricService, cfg *config.Config) *
 }
 
 func (a *AgentWorker) Run() error {
-	updateMetricsTicker := time.NewTicker(time.Duration(a.config.PollInterval) * time.Second)
-	sendMetricsTicker := time.NewTicker(time.Duration(a.config.ReportInterval) * time.Second)
-	pollCount := 0
-	for {
-		select {
-		case <-updateMetricsTicker.C:
-			pollCount++
-			err := a.agentMetricService.UpdateMetrics(pollCount)
+	jobs := make(chan domain.MetricRequestJSON, 100)
+
+	go a.agentMetricService.CollectMetrics(a.config.PollInterval)
+	go a.agentMetricService.ReportMetrics(a.config.ReportInterval, jobs)
+
+	g := new(errgroup.Group)
+	for w := 1; w <= a.config.RateLimit; w++ {
+		g.Go(func() error {
+			err := a.agentMetricService.SendMetrics(a.config, jobs)
 			if err != nil {
-				return fmt.Errorf("failed to update metrics %w", err)
+				return err
 			}
-		case <-sendMetricsTicker.C:
-			err := a.agentMetricService.SendMetrics(a.config)
-			if err != nil {
-				logger.Log.Error("failed to send metrics", zap.Error(err))
-			}
-			pollCount = 0
-		}
+			return nil
+		})
 	}
+	if err := g.Wait(); err != nil {
+		logger.Log.Error("error occurred during sending metrics", zap.Error(err))
+		return err
+	}
+	return nil
 }
