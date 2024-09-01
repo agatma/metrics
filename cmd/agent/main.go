@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 
@@ -20,6 +21,8 @@ func main() {
 
 func run() error {
 	cfg, err := config.NewConfig()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	if err != nil {
 		return fmt.Errorf("can't load config: %w", err)
 	}
@@ -40,7 +43,7 @@ func run() error {
 	}
 	agentMetricService := service.NewAgentMetricService(gaugeAgentStorage, counterAgentStorage)
 	worker := workers.NewAgentWorker(agentMetricService, cfg)
-	if err = worker.Run(); err != nil {
+	if err = worker.Run(ctx); err != nil {
 		return fmt.Errorf("server has failed: %w", err)
 	}
 	return nil
