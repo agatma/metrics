@@ -10,7 +10,7 @@ import (
 )
 
 type InMemoryStore struct {
-	mux     *sync.Mutex
+	mux     *sync.RWMutex
 	metrics map[domain.Key]domain.Value
 }
 
@@ -22,7 +22,7 @@ type MetricStorage struct {
 
 func NewStorage(cfg *Config) (*MetricStorage, error) {
 	inMemoryStore := InMemoryStore{
-		mux:     &sync.Mutex{},
+		mux:     &sync.RWMutex{},
 		metrics: make(map[domain.Key]domain.Value),
 	}
 	if cfg.StoreInterval == 0 {
@@ -41,8 +41,6 @@ func NewStorage(cfg *Config) (*MetricStorage, error) {
 }
 
 func (s *MetricStorage) SetMetric(ctx context.Context, m *domain.Metric) (*domain.Metric, error) {
-	s.mux.Lock()
-	defer s.mux.Unlock()
 	s.saveMetric(m)
 	if s.syncWrite {
 		err := files.SaveMetricsToFile(s.filepath, s.metrics)
@@ -50,12 +48,14 @@ func (s *MetricStorage) SetMetric(ctx context.Context, m *domain.Metric) (*domai
 			return nil, fmt.Errorf("failed to save metrics to file %w", err)
 		}
 	}
-	return m, nil
+	metric, err := s.GetMetric(ctx, m.MType, m.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get metric %w", err)
+	}
+	return metric, nil
 }
 
 func (s *MetricStorage) SetMetrics(ctx context.Context, metrics domain.MetricsList) (domain.MetricsList, error) {
-	s.mux.Lock()
-	defer s.mux.Unlock()
 	for _, metric := range metrics {
 		s.saveMetric(&metric)
 	}
@@ -65,12 +65,22 @@ func (s *MetricStorage) SetMetrics(ctx context.Context, metrics domain.MetricsLi
 			return nil, fmt.Errorf("failed to save metrics to file %w", err)
 		}
 	}
-	return metrics, nil
+	metricsOut := make(domain.MetricsList, 0)
+	for _, metric := range metrics {
+		m, err := s.GetMetric(ctx, metric.MType, metric.ID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get metric %w", err)
+		}
+		if m != nil {
+			metricsOut = append(metricsOut, *m)
+		}
+	}
+	return metricsOut, nil
 }
 
 func (s *MetricStorage) GetMetric(ctx context.Context, mType, mName string) (*domain.Metric, error) {
-	s.mux.Lock()
-	defer s.mux.Unlock()
+	s.mux.RLock()
+	defer s.mux.RUnlock()
 	value, found := s.metrics[domain.Key{MType: mType, ID: mName}]
 	if !found {
 		return &domain.Metric{}, domain.ErrItemNotFound
@@ -84,8 +94,8 @@ func (s *MetricStorage) GetMetric(ctx context.Context, mType, mName string) (*do
 }
 
 func (s *MetricStorage) GetAllMetrics(ctx context.Context) (domain.MetricsList, error) {
-	s.mux.Lock()
-	defer s.mux.Unlock()
+	s.mux.RLock()
+	defer s.mux.RUnlock()
 	metrics := make(domain.MetricsList, 0)
 	for k, v := range s.metrics {
 		metrics = append(metrics, domain.Metric{
@@ -103,6 +113,8 @@ func (s *MetricStorage) Ping(ctx context.Context) error {
 }
 
 func (s *MetricStorage) saveMetric(m *domain.Metric) {
+	s.mux.Lock()
+	defer s.mux.Unlock()
 	key := domain.Key{MType: m.MType, ID: m.ID}
 	if m.MType == domain.Counter {
 		value, found := s.metrics[key]

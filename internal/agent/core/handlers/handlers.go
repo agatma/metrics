@@ -8,13 +8,14 @@ import (
 	"github.com/go-resty/resty/v2"
 	"go.uber.org/zap"
 
-	"metrics/internal/shared-kernel/compress"
-
+	"metrics/internal/agent/config"
 	"metrics/internal/agent/core/domain"
 	"metrics/internal/agent/logger"
+	"metrics/internal/shared-kernel/compress"
+	"metrics/internal/shared-kernel/hash"
 )
 
-func SendMetrics(host string, request *domain.MetricRequestJSON) error {
+func SendMetrics(cfg *config.Config, request *domain.MetricRequestJSON) error {
 	data, err := json.Marshal(request)
 	if err != nil {
 		return fmt.Errorf("failed to parse model: %w", err)
@@ -24,12 +25,14 @@ func SendMetrics(host string, request *domain.MetricRequestJSON) error {
 		return fmt.Errorf("failed to gzip metrics: %w", err)
 	}
 	client := resty.New()
-	resp, err := client.R().
+	req := client.R().
 		SetHeader("Content-Type", `application/json`).
 		SetHeader("Content-Encoding", `gzip`).
-		SetHeader("Accept-Encoding", `gzip`).
-		SetBody(buf).
-		Post(host + "/update/")
+		SetHeader("Accept-Encoding", `gzip`)
+	if cfg.Key != "" {
+		req.SetHeader(hash.Header, hash.Encode(buf, cfg.Key))
+	}
+	resp, err := req.SetBody(buf).Post(cfg.Host + "/update/")
 	if err != nil {
 		return fmt.Errorf("failed to send metrics: %w", err)
 	}

@@ -1,6 +1,7 @@
-package api
+package rest
 
 import (
+	"bytes"
 	"compress/gzip"
 	"fmt"
 	"io"
@@ -12,6 +13,7 @@ import (
 
 	"metrics/internal/server/logger"
 	"metrics/internal/shared-kernel/compress"
+	"metrics/internal/shared-kernel/hash"
 )
 
 type responseData struct {
@@ -38,7 +40,7 @@ func (r *loggingResponseWriter) WriteHeader(statusCode int) {
 	r.responseData.status = statusCode
 }
 
-func LoggingRequestMiddleware(h http.Handler) http.Handler {
+func (h *Handler) LoggingRequestMiddleware(next http.Handler) http.Handler {
 	logFn := func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		respData := &responseData{
@@ -49,7 +51,7 @@ func LoggingRequestMiddleware(h http.Handler) http.Handler {
 			ResponseWriter: w,
 			responseData:   respData,
 		}
-		h.ServeHTTP(&lw, r)
+		next.ServeHTTP(&lw, r)
 		duration := time.Since(start)
 		if respData.status == 0 {
 			respData.status = 200
@@ -65,7 +67,7 @@ func LoggingRequestMiddleware(h http.Handler) http.Handler {
 	return http.HandlerFunc(logFn)
 }
 
-func CompressRequestMiddleware(next http.Handler) http.Handler {
+func (h *Handler) CompressRequestMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.Contains(r.Header.Get("Content-Encoding"), "gzip") {
 			next.ServeHTTP(w, r)
@@ -91,7 +93,7 @@ func CompressRequestMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func CompressResponseMiddleware(next http.Handler) http.Handler {
+func (h *Handler) CompressResponseMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.Contains(r.Header.Get("Accept-Encoding"), `gzip`) {
 			next.ServeHTTP(w, r)
@@ -108,5 +110,28 @@ func CompressResponseMiddleware(next http.Handler) http.Handler {
 		w.Header().Set("Content-Encoding", `gzip`)
 
 		next.ServeHTTP(cw, r)
+	})
+}
+
+func (h *Handler) WithHash(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get(hash.Header) != "" && h.config.Key != "" {
+			bodyBytes, err := io.ReadAll(r.Body)
+			if err != nil {
+				http.Error(w, "error reading request body", http.StatusInternalServerError)
+				return
+			}
+			if hash.Encode(bodyBytes, h.config.Key) != r.Header.Get(hash.Header) {
+				http.Error(w, "incorrect hash", http.StatusBadRequest)
+				return
+			}
+			r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+		}
+		hw := &hash.Writer{
+			ResponseWriter: w,
+			Key:            h.config.Key,
+			RHash:          r.Header.Get(hash.Header),
+		}
+		next.ServeHTTP(hw, r)
 	})
 }

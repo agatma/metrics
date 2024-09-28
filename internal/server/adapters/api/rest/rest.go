@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"metrics/internal/server/adapters/api"
 	"net/http"
 	"os"
 	"os/signal"
@@ -40,8 +39,9 @@ type MetricService interface {
 	Ping(ctx context.Context) error
 }
 
-type handler struct {
+type Handler struct {
 	metricService MetricService
+	config        *config.Config
 }
 
 type API struct {
@@ -66,14 +66,18 @@ func (a *API) Run() error {
 }
 
 func NewAPI(metricService MetricService, cfg *config.Config) *API {
-	h := &handler{
+	h := &Handler{
 		metricService: metricService,
+		config:        cfg,
 	}
 	r := chi.NewRouter()
-	r.Use(api.LoggingRequestMiddleware)
-	r.Use(api.CompressRequestMiddleware)
-	r.Use(api.CompressResponseMiddleware)
+
+	r.Use(h.LoggingRequestMiddleware)
+	r.Use(h.WithHash)
+	r.Use(h.CompressRequestMiddleware)
+	r.Use(h.CompressResponseMiddleware)
 	r.Use(middleware.Timeout(serverTimeout * time.Second))
+
 	r.Route("/update", func(r chi.Router) {
 		r.Post("/", h.SetMetric)
 		r.Post("/{metricType}/{metricName}/{metricValue}", h.SetMetricValue)
@@ -93,7 +97,7 @@ func NewAPI(metricService MetricService, cfg *config.Config) *API {
 	}
 }
 
-func (h *handler) SetMetricValue(w http.ResponseWriter, req *http.Request) {
+func (h *Handler) SetMetricValue(w http.ResponseWriter, req *http.Request) {
 	mType := chi.URLParam(req, metricType)
 	mName := chi.URLParam(req, metricName)
 	mValue := chi.URLParam(req, metricValue)
@@ -115,7 +119,7 @@ func (h *handler) SetMetricValue(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func (h *handler) SetMetric(w http.ResponseWriter, req *http.Request) {
+func (h *Handler) SetMetric(w http.ResponseWriter, req *http.Request) {
 	var m domain.Metric
 	if err := json.NewDecoder(req.Body).Decode(&m); err != nil {
 		logger.Log.Info("cannot decode request JSON body", zap.Error(err))
@@ -151,7 +155,7 @@ func (h *handler) SetMetric(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func (h *handler) SetMetrics(w http.ResponseWriter, req *http.Request) {
+func (h *Handler) SetMetrics(w http.ResponseWriter, req *http.Request) {
 	var metricsIn domain.MetricsList
 	if err := json.NewDecoder(req.Body).Decode(&metricsIn); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -186,7 +190,7 @@ func (h *handler) SetMetrics(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func (h *handler) GetMetricValue(w http.ResponseWriter, req *http.Request) {
+func (h *Handler) GetMetricValue(w http.ResponseWriter, req *http.Request) {
 	mType, mName := chi.URLParam(req, metricType), chi.URLParam(req, metricName)
 	metricValue, err := h.metricService.GetMetricValue(req.Context(), mType, mName)
 	if err != nil {
@@ -203,7 +207,7 @@ func (h *handler) GetMetricValue(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func (h *handler) GetMetric(w http.ResponseWriter, req *http.Request) {
+func (h *Handler) GetMetric(w http.ResponseWriter, req *http.Request) {
 	var m domain.Metric
 	if err := json.NewDecoder(req.Body).Decode(&m); err != nil {
 		logger.Log.Info("cannot decode request JSON body", zap.Error(err))
@@ -227,7 +231,7 @@ func (h *handler) GetMetric(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func (h *handler) GetAllMetrics(w http.ResponseWriter, req *http.Request) {
+func (h *Handler) GetAllMetrics(w http.ResponseWriter, req *http.Request) {
 	metrics, err := h.metricService.GetAllMetrics(req.Context())
 	if err != nil {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
@@ -255,7 +259,7 @@ func (h *handler) GetAllMetrics(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func (h *handler) Ping(w http.ResponseWriter, req *http.Request) {
+func (h *Handler) Ping(w http.ResponseWriter, req *http.Request) {
 	err := h.metricService.Ping(req.Context())
 	if err != nil {
 		logger.Log.Info("failed to ping storage", zap.Error(err))
