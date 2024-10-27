@@ -1,3 +1,4 @@
+// Package service provides functionality for collecting and reporting metrics.
 package service
 
 import (
@@ -21,17 +22,25 @@ import (
 	"metrics/internal/shared-kernel/retrying"
 )
 
+// AgentMetricStorage defines the interface for storing and retrieving metrics.
 type AgentMetricStorage interface {
+	// GetMetricValue retrieves a single metric value.
 	GetMetricValue(request *domain.MetricRequest) *domain.MetricResponse
+
+	// SetMetricValue stores a single metric value.
 	SetMetricValue(request *domain.SetMetricRequest) *domain.SetMetricResponse
+
+	// GetAllMetrics retrieves all metrics.
 	GetAllMetrics(request *domain.GetAllMetricsRequest) *domain.GetAllMetricsResponse
 }
 
+// AgentMetricService manages the collection and storage of metrics.
 type AgentMetricService struct {
 	gaugeAgentStorage   AgentMetricStorage
 	counterAgentStorage AgentMetricStorage
 }
 
+// NewAgentMetricService creates a new instance of AgentMetricService.
 func NewAgentMetricService(
 	gaugeAgentStorage AgentMetricStorage,
 	counterAgentStorage AgentMetricStorage,
@@ -42,6 +51,7 @@ func NewAgentMetricService(
 	}
 }
 
+// collectMemStats collects memory statistics and returns them as a Metrics object.
 func (a *AgentMetricService) collectMemStats() domain.Metrics {
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
@@ -91,6 +101,7 @@ func (a *AgentMetricService) collectMemStats() domain.Metrics {
 	}
 }
 
+// CollectMetrics collects various system metrics and stores them using the gauge agent storage.
 func (a *AgentMetricService) CollectMetrics(pollCount int) error {
 	metrics := a.collectMemStats()
 	for metricName, metricValue := range metrics.Values {
@@ -104,6 +115,7 @@ func (a *AgentMetricService) CollectMetrics(pollCount int) error {
 			return fmt.Errorf("failed to update gauge metric: %w", response.Error)
 		}
 	}
+
 	response := a.gaugeAgentStorage.SetMetricValue(&domain.SetMetricRequest{
 		MetricType:  domain.Gauge,
 		MetricName:  domain.RandomValue,
@@ -113,6 +125,7 @@ func (a *AgentMetricService) CollectMetrics(pollCount int) error {
 		logger.Log.Error("failed to update random value", zap.Error(response.Error))
 		return fmt.Errorf("failed to update random value: %w", response.Error)
 	}
+
 	response = a.counterAgentStorage.SetMetricValue(&domain.SetMetricRequest{
 		MetricType:  domain.Counter,
 		MetricName:  domain.PollCount,
@@ -122,10 +135,12 @@ func (a *AgentMetricService) CollectMetrics(pollCount int) error {
 		logger.Log.Error("failed to update pollCount", zap.Error(response.Error))
 		return fmt.Errorf("failed to update pollCount: %w", response.Error)
 	}
+
 	logger.Log.Info("metrics collected")
 	return nil
 }
 
+// getAllMetrics retrieves metrics based on the given metric type.
 func (a *AgentMetricService) getAllMetrics(request *domain.GetAllMetricsRequest) *domain.GetAllMetricsResponse {
 	switch request.MetricType {
 	case domain.Gauge:
@@ -139,6 +154,7 @@ func (a *AgentMetricService) getAllMetrics(request *domain.GetAllMetricsRequest)
 	}
 }
 
+// ReportMetrics sends collected metrics to the configured destination.
 func (a *AgentMetricService) ReportMetrics(jobs chan<- domain.MetricRequestJSON) error {
 	response := a.getAllMetrics(&domain.GetAllMetricsRequest{
 		MetricType: domain.Gauge,
@@ -147,6 +163,7 @@ func (a *AgentMetricService) ReportMetrics(jobs chan<- domain.MetricRequestJSON)
 		logger.Log.Error("error occurred during getting gauge metrics", zap.Error(response.Error))
 		return fmt.Errorf("error occurred during getting gauge metrics: %w", response.Error)
 	}
+
 	for metricName, metricValue := range response.Values {
 		gaugeValue, err := strconv.ParseFloat(metricValue, 64)
 		if err != nil {
@@ -160,6 +177,7 @@ func (a *AgentMetricService) ReportMetrics(jobs chan<- domain.MetricRequestJSON)
 		}
 		jobs <- request
 	}
+
 	response = a.getAllMetrics(&domain.GetAllMetricsRequest{
 		MetricType: domain.Counter,
 	})
@@ -167,6 +185,7 @@ func (a *AgentMetricService) ReportMetrics(jobs chan<- domain.MetricRequestJSON)
 		logger.Log.Error("error occurred during getting counter metrics", zap.Error(response.Error))
 		return fmt.Errorf("error occurred during getting counter metrics: %w", response.Error)
 	}
+
 	for metricName, metricValue := range response.Values {
 		counterValue, err := strconv.Atoi(metricValue)
 		if err != nil {
@@ -181,10 +200,12 @@ func (a *AgentMetricService) ReportMetrics(jobs chan<- domain.MetricRequestJSON)
 		}
 		jobs <- request
 	}
+
 	logger.Log.Info("metrics reported")
 	return nil
 }
 
+// SendMetrics sends metrics asynchronously using the retry-go package.
 func (a *AgentMetricService) SendMetrics(
 	ctx context.Context,
 	cfg *config.Config,

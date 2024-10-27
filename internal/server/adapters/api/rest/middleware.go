@@ -16,16 +16,19 @@ import (
 	"metrics/internal/shared-kernel/hash"
 )
 
+// responseData holds status and size information for responses.
 type responseData struct {
 	status int
 	size   int
 }
 
+// loggingResponseWriter wraps an http.ResponseWriter to track response data.
 type loggingResponseWriter struct {
 	http.ResponseWriter
 	responseData *responseData
 }
 
+// Write implements http.ResponseWriter.Write.
 func (r *loggingResponseWriter) Write(b []byte) (int, error) {
 	size, err := r.ResponseWriter.Write(b)
 	if err != nil {
@@ -35,11 +38,13 @@ func (r *loggingResponseWriter) Write(b []byte) (int, error) {
 	return size, nil
 }
 
+// WriteHeader implements http.ResponseWriter.WriteHeader.
 func (r *loggingResponseWriter) WriteHeader(statusCode int) {
 	r.ResponseWriter.WriteHeader(statusCode)
 	r.responseData.status = statusCode
 }
 
+// LoggingRequestMiddleware logs incoming HTTP requests.
 func (h *Handler) LoggingRequestMiddleware(next http.Handler) http.Handler {
 	logFn := func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
@@ -67,6 +72,7 @@ func (h *Handler) LoggingRequestMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(logFn)
 }
 
+// CompressRequestMiddleware compresses incoming HTTP requests.
 func (h *Handler) CompressRequestMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.Contains(r.Header.Get("Content-Encoding"), "gzip") {
@@ -93,6 +99,7 @@ func (h *Handler) CompressRequestMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// CompressResponseMiddleware compresses outgoing HTTP responses.
 func (h *Handler) CompressResponseMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.Contains(r.Header.Get("Accept-Encoding"), `gzip`) {
@@ -113,6 +120,7 @@ func (h *Handler) CompressResponseMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// WithHash adds request hashing to the handler chain.
 func (h *Handler) WithHash(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get(hash.Header) != "" && h.config.Key != "" {

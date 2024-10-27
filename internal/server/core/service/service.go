@@ -1,3 +1,4 @@
+// Package service provides functionality for managing metrics.
 package service
 
 import (
@@ -14,19 +15,31 @@ import (
 	"go.uber.org/zap"
 )
 
+// MetricStorage defines the interface for metric storage operations.
 type MetricStorage interface {
+	// GetMetric retrieves a specific metric based on type and name.
 	GetMetric(ctx context.Context, mType, mName string) (*domain.Metric, error)
+
+	// SetMetric sets a single metric.
 	SetMetric(ctx context.Context, m *domain.Metric) (*domain.Metric, error)
+
+	// SetMetrics sets multiple metrics at once.
 	SetMetrics(ctx context.Context, metrics domain.MetricsList) (domain.MetricsList, error)
+
+	// GetAllMetrics retrieves all stored metrics.
 	GetAllMetrics(ctx context.Context) (domain.MetricsList, error)
+
+	// Ping checks the health of the storage system.
 	Ping(ctx context.Context) error
 }
 
+// MetricService represents the main service for managing metrics.
 type MetricService struct {
 	storage  MetricStorage
 	filepath string
 }
 
+// NewMetricService creates a new instance of MetricService.
 func NewMetricService(cfg *config.Config, storage MetricStorage) (*MetricService, error) {
 	ms := MetricService{
 		storage:  storage,
@@ -54,6 +67,7 @@ func NewMetricService(cfg *config.Config, storage MetricStorage) (*MetricService
 	return &ms, nil
 }
 
+// GetMetric retrieves a specific metric based on type and name.
 func (ms *MetricService) GetMetric(ctx context.Context, mType, mName string) (*domain.Metric, error) {
 	metric, err := ms.storage.GetMetric(ctx, mType, mName)
 	if err != nil {
@@ -62,6 +76,7 @@ func (ms *MetricService) GetMetric(ctx context.Context, mType, mName string) (*d
 	return metric, nil
 }
 
+// SetMetric sets a single metric based on its type.
 func (ms *MetricService) SetMetric(ctx context.Context, m *domain.Metric) (*domain.Metric, error) {
 	switch m.MType {
 	case domain.Gauge:
@@ -87,6 +102,7 @@ func (ms *MetricService) SetMetric(ctx context.Context, m *domain.Metric) (*doma
 	}
 }
 
+// SetMetrics sets multiple metrics at once.
 func (ms *MetricService) SetMetrics(ctx context.Context, metrics domain.MetricsList) (domain.MetricsList, error) {
 	metrics, err := ms.storage.SetMetrics(ctx, metrics)
 	if err != nil {
@@ -95,6 +111,7 @@ func (ms *MetricService) SetMetrics(ctx context.Context, metrics domain.MetricsL
 	return metrics, nil
 }
 
+// SetMetricValue sets a metric value based on the provided request.
 func (ms *MetricService) SetMetricValue(ctx context.Context, req *domain.SetMetricRequest) (*domain.Metric, error) {
 	switch req.MType {
 	case domain.Gauge:
@@ -131,6 +148,7 @@ func (ms *MetricService) SetMetricValue(ctx context.Context, req *domain.SetMetr
 	}
 }
 
+// GetMetricValue retrieves the value of a metric based on its type and name.
 func (ms *MetricService) GetMetricValue(ctx context.Context, mType, mName string) (string, error) {
 	metric, err := ms.storage.GetMetric(ctx, mType, mName)
 	if err != nil {
@@ -148,6 +166,7 @@ func (ms *MetricService) GetMetricValue(ctx context.Context, mType, mName string
 	}
 }
 
+// GetAllMetrics retrieves all stored metrics.
 func (ms *MetricService) GetAllMetrics(ctx context.Context) (domain.MetricsList, error) {
 	metrics, err := ms.storage.GetAllMetrics(ctx)
 	if err != nil {
@@ -156,6 +175,7 @@ func (ms *MetricService) GetAllMetrics(ctx context.Context) (domain.MetricsList,
 	return metrics, nil
 }
 
+// Ping checks the health of the storage system.
 func (ms *MetricService) Ping(ctx context.Context) error {
 	err := ms.storage.Ping(ctx)
 	if err != nil {
@@ -164,6 +184,7 @@ func (ms *MetricService) Ping(ctx context.Context) error {
 	return nil
 }
 
+// SaveMetricsToFile saves all metrics to a file.
 func (ms *MetricService) SaveMetricsToFile() error {
 	metricValues := make(domain.MetricValues)
 	metrics, err := ms.storage.GetAllMetrics(context.TODO())
@@ -180,6 +201,7 @@ func (ms *MetricService) SaveMetricsToFile() error {
 	return nil
 }
 
+// loadMetricsFromFile loads metrics from a file during initialization.
 func (ms *MetricService) loadMetricsFromFile() error {
 	metrics, err := files.LoadMetricsFromFile(ms.filepath)
 	if err != nil {

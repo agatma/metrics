@@ -14,10 +14,13 @@ import (
 	"go.uber.org/zap"
 )
 
+// addTime is the additional delay added to the initial delay for subsequent retries.
 const addTime = 2
 
+// Attempts specifies the maximum number of retry attempts.
 const Attempts uint = 3
 
+// DelayType calculates the duration for the next retry attempt.
 func DelayType(n uint, _ error, config *retry.Config) time.Duration {
 	switch n {
 	case 0:
@@ -29,14 +32,17 @@ func DelayType(n uint, _ error, config *retry.Config) time.Duration {
 	}
 }
 
+// OnRetry logs information about the retry attempt.
 func OnRetry(n uint, err error) {
 	logger.Log.Error(fmt.Sprintf(`%d %s`, n, err.Error()))
 }
 
+// Transaction represents a database transaction interface.
 type Transaction interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 }
 
+// ExecContext executes a SQL query using the provided transaction and retry logic.
 func ExecContext(ctx context.Context, tx Transaction, query string, args ...any) error {
 	var originalErr error
 	err := retry.Do(

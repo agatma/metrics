@@ -1,3 +1,4 @@
+// Package rest provides RESTful API handlers for managing metrics.
 package rest
 
 import (
@@ -6,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/pprof"
 	"os"
 	"os/signal"
 	"syscall"
@@ -20,6 +22,7 @@ import (
 	"metrics/internal/server/logger"
 )
 
+// Constants for metric-related fields
 const (
 	metricType  = "metricType"
 	metricValue = "metricValue"
@@ -29,16 +32,31 @@ const (
 	serverTimeout = 3
 )
 
+// MetricService defines the interface for metric operations
 type MetricService interface {
+	// GetMetric retrieves a specific metric based on its type and name
 	GetMetric(ctx context.Context, mType, mName string) (*domain.Metric, error)
+
+	// GetMetricValue retrieves the value of a specific metric
 	GetMetricValue(ctx context.Context, mType, mName string) (string, error)
+
+	// SetMetric creates or updates a metric
 	SetMetric(ctx context.Context, m *domain.Metric) (*domain.Metric, error)
+
+	// SetMetrics sets multiple metrics at once
 	SetMetrics(ctx context.Context, metrics domain.MetricsList) (domain.MetricsList, error)
+
+	// SetMetricValue sets the value of an existing metric
 	SetMetricValue(ctx context.Context, m *domain.SetMetricRequest) (*domain.Metric, error)
+
+	// GetAllMetrics retrieves all available metrics
 	GetAllMetrics(ctx context.Context) (domain.MetricsList, error)
+
+	// Ping checks the health of the storage system
 	Ping(ctx context.Context) error
 }
 
+// Handler represents the handler for API operations
 type Handler struct {
 	metricService MetricService
 	config        *config.Config
@@ -48,6 +66,7 @@ type API struct {
 	srv *http.Server
 }
 
+// Run starts the HTTP server
 func (a *API) Run() error {
 	sigint := make(chan os.Signal, 1)
 	signal.Notify(sigint, os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT)
@@ -65,6 +84,7 @@ func (a *API) Run() error {
 	return nil
 }
 
+// NewAPI creates a new instance of the API
 func NewAPI(metricService MetricService, cfg *config.Config) *API {
 	h := &Handler{
 		metricService: metricService,
@@ -77,6 +97,17 @@ func NewAPI(metricService MetricService, cfg *config.Config) *API {
 	r.Use(h.CompressRequestMiddleware)
 	r.Use(h.CompressResponseMiddleware)
 	r.Use(middleware.Timeout(serverTimeout * time.Second))
+
+	r.HandleFunc("/debug/pprof", pprof.Index)
+	r.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	r.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	r.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	r.HandleFunc("/debug/pprof/trace", pprof.Trace)
+
+	r.Handle("/debug/pprof/block", pprof.Handler("block"))
+	r.Handle("/debug/pprof/goroutine", pprof.Handler("goroutine"))
+	r.Handle("/debug/pprof/heap", pprof.Handler("heap"))
+	r.Handle("/debug/pprof/threadcreate", pprof.Handler("threadcreate"))
 
 	r.Route("/update", func(r chi.Router) {
 		r.Post("/", h.SetMetric)
@@ -97,6 +128,7 @@ func NewAPI(metricService MetricService, cfg *config.Config) *API {
 	}
 }
 
+// SetMetricValue handles POST requests to update metric values
 func (h *Handler) SetMetricValue(w http.ResponseWriter, req *http.Request) {
 	mType := chi.URLParam(req, metricType)
 	mName := chi.URLParam(req, metricName)
@@ -119,6 +151,7 @@ func (h *Handler) SetMetricValue(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+// SetMetric handles POST requests to set or update metrics
 func (h *Handler) SetMetric(w http.ResponseWriter, req *http.Request) {
 	var m domain.Metric
 	if err := json.NewDecoder(req.Body).Decode(&m); err != nil {
@@ -155,6 +188,7 @@ func (h *Handler) SetMetric(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
+// SetMetrics handles POST requests to set multiple metrics at once
 func (h *Handler) SetMetrics(w http.ResponseWriter, req *http.Request) {
 	var metricsIn domain.MetricsList
 	if err := json.NewDecoder(req.Body).Decode(&metricsIn); err != nil {
@@ -190,6 +224,7 @@ func (h *Handler) SetMetrics(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
+// GetMetricValue handles GET requests to retrieve metric values
 func (h *Handler) GetMetricValue(w http.ResponseWriter, req *http.Request) {
 	mType, mName := chi.URLParam(req, metricType), chi.URLParam(req, metricName)
 	metricValue, err := h.metricService.GetMetricValue(req.Context(), mType, mName)
@@ -207,6 +242,7 @@ func (h *Handler) GetMetricValue(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
+// GetMetric handles GET requests to retrieve metrics based on type and name
 func (h *Handler) GetMetric(w http.ResponseWriter, req *http.Request) {
 	var m domain.Metric
 	if err := json.NewDecoder(req.Body).Decode(&m); err != nil {
@@ -231,6 +267,7 @@ func (h *Handler) GetMetric(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
+// GetAllMetrics handles GET requests to retrieve all available metrics
 func (h *Handler) GetAllMetrics(w http.ResponseWriter, req *http.Request) {
 	metrics, err := h.metricService.GetAllMetrics(req.Context())
 	if err != nil {
@@ -259,6 +296,7 @@ func (h *Handler) GetAllMetrics(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
+// Ping handles GET requests to check the health of the storage system
 func (h *Handler) Ping(w http.ResponseWriter, req *http.Request) {
 	err := h.metricService.Ping(req.Context())
 	if err != nil {

@@ -7,11 +7,13 @@ import (
 	"net/http"
 )
 
+// Writer wraps an http.ResponseWriter with gzip compression capabilities.
 type Writer struct {
 	http.ResponseWriter
 	zw *gzip.Writer
 }
 
+// NewCompressWriter creates a new gzip Writer that wraps the provided http.ResponseWriter.
 func NewCompressWriter(w http.ResponseWriter) *Writer {
 	return &Writer{
 		w,
@@ -19,6 +21,7 @@ func NewCompressWriter(w http.ResponseWriter) *Writer {
 	}
 }
 
+// Write implements the io.Writer interface for the Writer.
 func (c *Writer) Write(p []byte) (int, error) {
 	n, err := c.zw.Write(p)
 	if err != nil {
@@ -27,6 +30,7 @@ func (c *Writer) Write(p []byte) (int, error) {
 	return n, nil
 }
 
+// Close closes the underlying gzip writer.
 func (c *Writer) Close() error {
 	err := c.zw.Close()
 	if err != nil {
@@ -35,6 +39,7 @@ func (c *Writer) Close() error {
 	return nil
 }
 
+// GzipData compresses the provided data using gzip compression.
 func GzipData(data []byte) ([]byte, error) {
 	var b bytes.Buffer
 	gz := gzip.NewWriter(&b)
