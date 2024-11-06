@@ -146,7 +146,6 @@ func TestHandler_SetMetricValueFailed(t *testing.T) {
 		},
 	}
 	cfg := &config.Config{}
-	cfg.Restore = false
 	metricStorage, err := storage.NewStorage(storage.Config{
 		Memory: &memory.Config{},
 	})
