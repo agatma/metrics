@@ -4,15 +4,9 @@ package service
 import (
 	"context"
 	"fmt"
-	"strconv"
-	"time"
-
-	"metrics/internal/server/config"
 	"metrics/internal/server/core/domain"
 	"metrics/internal/server/core/files"
-	"metrics/internal/server/logger"
-
-	"go.uber.org/zap"
+	"strconv"
 )
 
 // MetricStorage defines the interface for metric storage operations.
@@ -40,29 +34,10 @@ type MetricService struct {
 }
 
 // NewMetricService creates a new instance of MetricService.
-func NewMetricService(cfg *config.Config, storage MetricStorage) (*MetricService, error) {
+func NewMetricService(filepath string, storage MetricStorage) (*MetricService, error) {
 	ms := MetricService{
 		storage:  storage,
-		filepath: cfg.FileStoragePath,
-	}
-	if cfg.Restore {
-		err := ms.loadMetricsFromFile()
-		if err != nil {
-			return nil, fmt.Errorf("failed to restore data for metric service %w", err)
-		}
-	}
-	if cfg.StoreInterval > 0 {
-		go func() {
-			t := time.NewTicker(time.Duration(cfg.StoreInterval) * time.Second)
-			for {
-				<-t.C
-				err := ms.SaveMetricsToFile()
-				if err != nil {
-					logger.Log.Error("failed to save metrics", zap.Error(err))
-				}
-				logger.Log.Info("metrics saved to file after timeout", zap.Int("seconds", cfg.StoreInterval))
-			}
-		}()
+		filepath: filepath,
 	}
 	return &ms, nil
 }
@@ -184,8 +159,8 @@ func (ms *MetricService) Ping(ctx context.Context) error {
 	return nil
 }
 
-// SaveMetricsToFile saves all metrics to a file.
-func (ms *MetricService) SaveMetricsToFile() error {
+// SaveMetrics saves all metrics to a file.
+func (ms *MetricService) SaveMetrics() error {
 	metricValues := make(domain.MetricValues)
 	metrics, err := ms.storage.GetAllMetrics(context.TODO())
 	if err != nil {
@@ -201,14 +176,14 @@ func (ms *MetricService) SaveMetricsToFile() error {
 	return nil
 }
 
-// loadMetricsFromFile loads metrics from a file during initialization.
-func (ms *MetricService) loadMetricsFromFile() error {
+// LoadMetrics loads all metrics from a file.
+func (ms *MetricService) LoadMetrics() error {
 	metrics, err := files.LoadMetricsFromFile(ms.filepath)
 	if err != nil {
 		return fmt.Errorf("failed to load metrics for restore: %w", err)
 	}
 	for k, v := range metrics {
-		_, err := ms.storage.SetMetric(context.TODO(), &domain.Metric{
+		_, err = ms.storage.SetMetric(context.TODO(), &domain.Metric{
 			ID:    k.ID,
 			MType: k.MType,
 			Value: v.Value,
