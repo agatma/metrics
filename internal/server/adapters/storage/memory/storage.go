@@ -1,3 +1,4 @@
+// Package memory provides implementations of the MetricStorage interface.
 package memory
 
 import (

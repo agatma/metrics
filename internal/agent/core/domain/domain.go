@@ -1,3 +1,4 @@
+// Package domain provides models for agent.
 package domain
 
 const (

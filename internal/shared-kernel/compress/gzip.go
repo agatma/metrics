@@ -1,3 +1,4 @@
+// Package compress.
 package compress
 
 import (

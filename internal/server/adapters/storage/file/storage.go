@@ -1,3 +1,4 @@
+// Package file provides implementations of the MetricStorage interface.
 package file
 
 import (

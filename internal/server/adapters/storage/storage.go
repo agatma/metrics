@@ -1,13 +1,4 @@
-// Package storage provides implementations of the MetricStorage interface
-// for different storage adapters.
-//
-// It offers three types of storage:
-// - Database storage
-// - Memory storage
-// - File storage
-//
-// Users can configure which storage adapter to use through the Config parameter.
-
+// Package storage provides implementations of the MetricStorage interface.
 package storage
 
 import (

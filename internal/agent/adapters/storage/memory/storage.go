@@ -1,3 +1,4 @@
+// Package memory provides implementations of the AgentMetricStorage interface.
 package memory
 
 import (

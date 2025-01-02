@@ -1,3 +1,4 @@
+// Package retrying.
 package retrying
 
 import (
