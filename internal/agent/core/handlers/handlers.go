@@ -1,3 +1,4 @@
+// Package handlers provides functionality for sending metrics.
 package handlers
 
 import (
@@ -15,6 +16,23 @@ import (
 	"metrics/internal/shared-kernel/hash"
 )
 
+// SendMetrics sends metrics to the configured endpoint.
+//
+// This function marshals the provided MetricRequestJSON, compresses the data,
+// and sends it to the specified host using RESTy.
+//
+// Args:
+//
+//	cfg *config.Config: Configuration object containing host and key information.
+//	request *domain.MetricRequestJSON: Request containing metric data.
+//
+// Returns:
+//
+//	error: Any error that occurs during the process.
+//
+// Side effects:
+//   - Sends HTTP POST request to the configured endpoint.
+//   - Logs the request details if successful.
 func SendMetrics(cfg *config.Config, request *domain.MetricRequestJSON) error {
 	data, err := json.Marshal(request)
 	if err != nil {

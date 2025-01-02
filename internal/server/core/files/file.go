@@ -1,3 +1,4 @@
+// Package files provides functionality for saving and loading metrics to/from files.
 package files
 
 import (
@@ -14,6 +15,16 @@ import (
 	"go.uber.org/zap"
 )
 
+// SaveMetricsToFile saves the given metrics to a file.
+//
+// Args:
+//
+//	filepath (string): The path to save the metrics file.
+//	metrics (domain.MetricValues): The metrics to save.
+//
+// Returns:
+//
+//	error: Any error that occurred during the operation.
 func SaveMetricsToFile(filepath string, metrics domain.MetricValues) error {
 	file, err := os.Create(filepath)
 	if err != nil {
@@ -39,6 +50,16 @@ func SaveMetricsToFile(filepath string, metrics domain.MetricValues) error {
 	return nil
 }
 
+// LoadMetricsFromFile loads metrics from a file.
+//
+// Args:
+//
+//	filepath (string): The path to load the metrics file from.
+//
+// Returns:
+//
+//	domain.MetricValues: The loaded metrics.
+//	error: Any error that occurred during the operation.
 func LoadMetricsFromFile(filepath string) (domain.MetricValues, error) {
 	var (
 		metricList domain.MetricsList

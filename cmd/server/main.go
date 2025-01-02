@@ -6,6 +6,7 @@ import (
 	"log"
 	"metrics/internal/server/adapters/storage/database"
 	"net/http"
+	"time"
 
 	"metrics/internal/server/adapters/api/rest"
 	"metrics/internal/server/adapters/storage"
@@ -14,6 +15,8 @@ import (
 	"metrics/internal/server/config"
 	"metrics/internal/server/core/service"
 	"metrics/internal/server/logger"
+
+	"go.uber.org/zap"
 )
 
 func main() {
@@ -34,14 +37,33 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("failed to initialize a storage: %w", err)
 	}
-	metricService, err := service.NewMetricService(cfg, metricStorage)
+	metricService, err := service.NewMetricService(cfg.FileStoragePath, metricStorage)
 	if err != nil {
 		return fmt.Errorf("failed to initialize a service: %w", err)
+	}
+	if cfg.Restore {
+		err = metricService.LoadMetrics()
+		if err != nil {
+			return fmt.Errorf("failed to restore data for metric service %w", err)
+		}
+	}
+	if cfg.StoreInterval > 0 {
+		go func() {
+			t := time.NewTicker(time.Duration(cfg.StoreInterval) * time.Second)
+			for {
+				<-t.C
+				err = metricService.SaveMetrics()
+				if err != nil {
+					logger.Log.Error("failed to save metrics", zap.Error(err))
+				}
+				logger.Log.Info("metrics saved to file after timeout", zap.Int("seconds", cfg.StoreInterval))
+			}
+		}()
 	}
 	api := rest.NewAPI(metricService, cfg)
 	if err = api.Run(); err != nil {
 		if errors.Is(err, http.ErrServerClosed) {
-			err = metricService.SaveMetricsToFile()
+			err = metricService.SaveMetrics()
 			if err != nil {
 				return fmt.Errorf("failed to save metrics during shutdown: %w", err)
 			}

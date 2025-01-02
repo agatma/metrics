@@ -1,3 +1,7 @@
+// Package workers provides functionality for collecting, reporting, and sending metrics.
+//
+// It defines an AgentWorker struct that handles metric collection, reporting, and sending.
+// The package uses goroutines and channels to manage concurrent operations.
 package workers
 
 import (
@@ -13,19 +17,28 @@ import (
 	"metrics/internal/agent/logger"
 )
 
+// Metrics represents the number of metrics collected per poll interval.
 const metrics = 100
 
+// AgentMetricService defines the interface for metric-related operations.
 type AgentMetricService interface {
+	// CollectMetrics collects metrics based on the given poll count.
 	CollectMetrics(pollCount int) error
+
+	// ReportMetrics reports collected metrics to the channel.
 	ReportMetrics(jobs chan<- domain.MetricRequestJSON) error
+
+	// SendMetrics sends reported metrics asynchronously.
 	SendMetrics(ctx context.Context, cfg *config.Config, jobs <-chan domain.MetricRequestJSON) error
 }
 
+// AgentWorker manages the collection, reporting, and sending of metrics.
 type AgentWorker struct {
 	agentMetricService AgentMetricService
 	config             *config.Config
 }
 
+// NewAgentWorker creates a new AgentWorker instance.
 func NewAgentWorker(agentMetricService AgentMetricService, cfg *config.Config) *AgentWorker {
 	return &AgentWorker{
 		agentMetricService: agentMetricService,
@@ -33,6 +46,7 @@ func NewAgentWorker(agentMetricService AgentMetricService, cfg *config.Config) *
 	}
 }
 
+// collectMetrics runs in a separate goroutine to continuously collect metrics.
 func (a *AgentWorker) collectMetrics(ctx context.Context) error {
 	collectMetricsTicker := time.NewTicker(time.Duration(a.config.PollInterval) * time.Second)
 	defer collectMetricsTicker.Stop()
@@ -54,6 +68,7 @@ func (a *AgentWorker) collectMetrics(ctx context.Context) error {
 	return nil
 }
 
+// reportMetrics runs in a separate goroutine to continuously report collected metrics.
 func (a *AgentWorker) reportMetrics(ctx context.Context, jobs chan<- domain.MetricRequestJSON) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -70,7 +85,7 @@ func (a *AgentWorker) reportMetrics(ctx context.Context, jobs chan<- domain.Metr
 			err := a.agentMetricService.ReportMetrics(jobs)
 			if err != nil {
 				logger.Log.Error("error occurred during reporting metrics", zap.Error(err))
-				return fmt.Errorf("error occurred during reporting metrics %w", err)
+				return fmt.Errorf("%w", err)
 			}
 			pollCount++
 		}
@@ -78,6 +93,7 @@ func (a *AgentWorker) reportMetrics(ctx context.Context, jobs chan<- domain.Metr
 	return nil
 }
 
+// Run starts the worker and manages its lifecycle.
 func (a *AgentWorker) Run(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	jobs := make(chan domain.MetricRequestJSON, metrics)
