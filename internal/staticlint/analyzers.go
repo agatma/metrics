@@ -54,8 +54,8 @@ import (
 // Analyzers build list with static analyzers
 // it returns list of analyzers, which includes
 //
-//	all SA class analyzers of the staticcheck.io package  https://staticcheck.io/docs/checks/
-//	S1009, ST1008, QF1012 analyzers of the staticcheck.io package  https://staticcheck.io/docs/checks/
+//	all SA class analyzers of the staticcheck package  https://staticcheck.io/docs/checks/
+//	S1009, ST1008, QF1012 analyzers of the staticcheck package  https://staticcheck.io/docs/checks/
 //	all analyzers from golang.org/x/tools/go/analysis/passes package
 func Analyzers() []*analysis.Analyzer {
 	var analyzers []*analysis.Analyzer
