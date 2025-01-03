@@ -19,6 +19,12 @@ import (
 	"go.uber.org/zap"
 )
 
+var (
+	buildVersion = "N/A"
+	buildDate    = "N/A"
+	buildCommit  = "N/A"
+)
+
 func main() {
 	if err := run(); err != nil {
 		log.Fatal(err)
@@ -33,6 +39,7 @@ func run() error {
 	if err = logger.Initialize(cfg.LogLevel); err != nil {
 		return fmt.Errorf("can't load logger: %w", err)
 	}
+	logger.Log.Info(fmt.Sprintf("version=%s, date=%s, commit=%s\n", buildVersion, buildDate, buildCommit))
 	metricStorage, err := initMetricStorage(cfg)
 	if err != nil {
 		return fmt.Errorf("failed to initialize a storage: %w", err)

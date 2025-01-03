@@ -1,4 +1,4 @@
-// Package database provides implementations of the MetricStorage interface
+// Package database provides implementations of the MetricStorage interface.
 package database
 
 import (
