@@ -2,6 +2,7 @@
 package staticlint
 
 import (
+	"errors"
 	"go/ast"
 
 	"golang.org/x/tools/go/analysis"
@@ -14,6 +15,8 @@ const (
 	funcName    = "Exit"
 )
 
+var notFoundErr = errors.New("not found")
+
 // MainExitAnalyzer defines an analyzer that checks for calls to os.Exit within the main function.
 var MainExitAnalyzer = &analysis.Analyzer{
 	Name: "main_check",
@@ -23,7 +26,7 @@ var MainExitAnalyzer = &analysis.Analyzer{
 
 func run(pass *analysis.Pass) (interface{}, error) {
 	for _, file := range pass.Files {
-		if file.Name.Name == packageDecl {
+		if file.Name.Name != packageDecl {
 			continue
 		}
 		ast.Inspect(file, func(node ast.Node) bool {
@@ -33,7 +36,7 @@ func run(pass *analysis.Pass) (interface{}, error) {
 			return true
 		})
 	}
-	return nil, nil
+	return nil, notFoundErr
 }
 func analyzeMain(pass *analysis.Pass, node ast.Node) {
 	expr := func(x *ast.ExprStmt) {
@@ -51,6 +54,7 @@ func analyzeMain(pass *analysis.Pass, node ast.Node) {
 		switch x := node.(type) {
 		case *ast.ExprStmt:
 			expr(x)
+		case *ast.CallExpr:
 		}
 		return true
 	})
