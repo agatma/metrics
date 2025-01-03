@@ -1,8 +1,8 @@
 // Package staticlint provides list of static analyzers for linter.
+// nolint
 package staticlint
 
 import (
-	"errors"
 	"go/ast"
 
 	"golang.org/x/tools/go/analysis"
@@ -14,8 +14,6 @@ const (
 	packageName = "os"
 	funcName    = "Exit"
 )
-
-var notFoundErr = errors.New("not found")
 
 // MainExitAnalyzer defines an analyzer that checks for calls to os.Exit within the main function.
 var MainExitAnalyzer = &analysis.Analyzer{
@@ -36,25 +34,34 @@ func run(pass *analysis.Pass) (interface{}, error) {
 			return true
 		})
 	}
-	return nil, notFoundErr
+	return nil, nil
 }
-func analyzeMain(pass *analysis.Pass, node ast.Node) {
-	expr := func(x *ast.ExprStmt) {
-		if call, ok := x.X.(*ast.CallExpr); ok {
-			if selector, ok := (call.Fun).(*ast.SelectorExpr); ok {
-				if ident, ok := (selector.X).(*ast.Ident); ok &&
-					ident.Name == packageName &&
-					selector.Sel.Name == funcName {
-					pass.Reportf(selector.Pos(), "main function contains os.Exit call")
-				}
-			}
-		}
+func isOsExitCall(expr ast.Expr) bool {
+	sel, ok := expr.(*ast.SelectorExpr)
+	if !ok {
+		return false
 	}
+	ident, ok := sel.X.(*ast.Ident)
+	if !ok {
+		return false
+	}
+	return ident.Name == packageName && sel.Sel.Name == funcName
+}
+
+func analyzeMain(pass *analysis.Pass, node ast.Node) {
 	ast.Inspect(node, func(node ast.Node) bool {
-		switch x := node.(type) {
-		case *ast.ExprStmt:
-			expr(x)
-		case *ast.CallExpr:
+		stmt, ok := node.(*ast.ExprStmt)
+		if !ok {
+			return true
+		}
+
+		call, ok := stmt.X.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+
+		if isOsExitCall(call.Fun) {
+			pass.Reportf(call.Fun.Pos(), "main function contains os.Exit call")
 		}
 		return true
 	})
