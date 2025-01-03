@@ -1,6 +1,4 @@
 // Package staticlint provides list of static analyzers for linter.
-//
-//nolint:run
 package staticlint
 
 import (
