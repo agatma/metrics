@@ -52,12 +52,11 @@ func SendMetrics(cfg *config.Config, request *domain.MetricRequestJSON) error {
 	if cfg.Key != "" {
 		req.SetHeader(hash.Header, hash.Encode(buf, cfg.Key))
 	}
-	fmt.Println("public_key", cfg.PublicKey)
 	if cfg.PublicKey != nil {
 		req.SetHeader("Encrypted", "crypto/rsa")
 		buf, err = rsa.EncryptPKCS1v15(rand.Reader, cfg.PublicKey, buf)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to encrypt data: %w", err)
 		}
 	}
 	resp, err := req.SetBody(buf).Post(cfg.Host + "/update/")

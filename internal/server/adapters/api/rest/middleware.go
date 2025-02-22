@@ -149,9 +149,7 @@ func (h *Handler) WithHashMiddleware(next http.Handler) http.Handler {
 // DecryptMiddleware extracts request body, if headers contains Encrypted value crypto/rsa.
 func (h *Handler) DecryptMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		logger.Log.Info(r.Header.Get("Encrypted"))
 		if r.Header.Get("Encrypted") == "crypto/rsa" {
-			logger.Log.Info("crypto-rsa")
 			if h.config.PrivateKey == nil {
 				http.Error(w, "private key is not defined", http.StatusInternalServerError)
 				return
