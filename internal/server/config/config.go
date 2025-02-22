@@ -17,20 +17,20 @@ const (
 )
 
 type Config struct {
-	Address         string `env:"ADDRESS" json:"address"`
-	StoreInterval   int    `env:"STORE_INTERVAL" json:"store_interval"`
-	DatabaseDSN     string `env:"DATABASE_DSN" json:"database_dsn"`
-	FileStoragePath string `env:"FILE_STORAGE_PATH" json:"store_file"`
-	Key             string `env:"KEY"`
-	Restore         bool   `env:"RESTORE" json:"restore"`
-	LogLevel        string
-	CryptoKey       string `env:"CRYPTO_KEY" json:"crypto_key"`
-	Config          string `env:"CONFIG"`
-	PrivateKey      *rsa.PrivateKey
+	Address         string          `env:"ADDRESS" json:"address"`
+	StoreInterval   int             `env:"STORE_INTERVAL" json:"store_interval"`
+	DatabaseDSN     string          `env:"DATABASE_DSN" json:"database_dsn"`
+	FileStoragePath string          `env:"FILE_STORAGE_PATH" json:"store_file"`
+	Key             string          `env:"KEY" json:"key"`
+	Restore         bool            `env:"RESTORE" json:"restore"`
+	LogLevel        string          `json:"log_level"`
+	CryptoKey       string          `env:"CRYPTO_KEY" json:"crypto_key"`
+	Config          string          `env:"CONFIG" json:"config"`
+	PrivateKey      *rsa.PrivateKey `json:"private_key,omitempty"`
 }
 
 func NewConfig() (*Config, error) {
-	cfg := getJsonConfig()
+	cfg := getJSONConfig()
 	flag.StringVar(&cfg.Address, "a", ":8080", "port to run server")
 	flag.IntVar(&cfg.StoreInterval, "i", storeInterval, "time interval (seconds) to backup server data")
 	flag.StringVar(&cfg.FileStoragePath, "f", "/tmp/metrics-db.json", "where to store server data")
@@ -50,7 +50,7 @@ func NewConfig() (*Config, error) {
 	return &cfg, nil
 }
 
-func getJsonConfig() Config {
+func getJSONConfig() Config {
 	var cfg Config
 	configPath := os.Getenv("CONFIG")
 	if configPath == "" {
