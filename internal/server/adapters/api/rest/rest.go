@@ -74,7 +74,7 @@ func (a *API) Run() error {
 	go func() {
 		<-sigint
 		if err := a.srv.Shutdown(context.Background()); err != nil {
-			logger.Log.Info("server shutdown: ", zap.Error(err))
+			logger.Log.Info("server shutdown gracefully: ", zap.Error(err))
 		}
 	}()
 	if err := a.srv.ListenAndServe(); err != nil {

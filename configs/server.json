@@ -1,9 +1,9 @@
 {
-  "address": ":8080",
+  "address": "localhost:8080",
   "restore": true,
   "store_interval": 300,
-  "store_file": "/tmp/metrics.db",
+  "store_file": "",
   "database_dsn": "",
-  "crypto_key": "./keys/server_key.pem",
+  "crypto_key": "",
   "trusted_subnet": ""
 }
