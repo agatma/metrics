@@ -93,7 +93,8 @@ func NewAPI(metricService MetricService, cfg *config.Config) *API {
 	r := chi.NewRouter()
 
 	r.Use(h.LoggingRequestMiddleware)
-	r.Use(h.WithHash)
+	r.Use(h.DecryptMiddleware)
+	r.Use(h.WithHashMiddleware)
 	r.Use(h.CompressRequestMiddleware)
 	r.Use(h.CompressResponseMiddleware)
 	r.Use(middleware.Timeout(serverTimeout * time.Second))

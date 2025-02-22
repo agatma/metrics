@@ -3,6 +3,8 @@ package rest
 import (
 	"bytes"
 	"compress/gzip"
+	"crypto/rand"
+	"crypto/rsa"
 	"fmt"
 	"io"
 	"net/http"
@@ -120,8 +122,8 @@ func (h *Handler) CompressResponseMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// WithHash adds request hashing to the handler chain.
-func (h *Handler) WithHash(next http.Handler) http.Handler {
+// WithHashMiddleware adds request hashing to the handler chain.
+func (h *Handler) WithHashMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get(hash.Header) != "" && h.config.Key != "" {
 			bodyBytes, err := io.ReadAll(r.Body)
@@ -141,5 +143,30 @@ func (h *Handler) WithHash(next http.Handler) http.Handler {
 			RHash:          r.Header.Get(hash.Header),
 		}
 		next.ServeHTTP(hw, r)
+	})
+}
+
+// DecryptMiddleware extracts request body, if headers contains Encrypted value crypto/rsa.
+func (h *Handler) DecryptMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		logger.Log.Info(r.Header.Get("Encrypted"))
+		if r.Header.Get("Encrypted") == "crypto/rsa" {
+			logger.Log.Info("crypto-rsa")
+			if h.config.PrivateKey == nil {
+				http.Error(w, "private key is not defined", http.StatusInternalServerError)
+				return
+			}
+			buf, err := io.ReadAll(r.Body)
+			if err != nil {
+				zap.L().Error(err.Error())
+			}
+			decrypted, err := rsa.DecryptPKCS1v15(rand.Reader, h.config.PrivateKey, buf)
+			if err != nil {
+				http.Error(w, "error during decrypt data", http.StatusBadRequest)
+				return
+			}
+			r.Body = io.NopCloser(bytes.NewReader(decrypted))
+		}
+		next.ServeHTTP(w, r)
 	})
 }

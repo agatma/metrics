@@ -2,8 +2,10 @@
 package config
 
 import (
+	"crypto/rsa"
 	"flag"
 	"fmt"
+	"metrics/internal/shared-kernel/cert"
 	"strings"
 
 	"github.com/caarlos0/env/v11"
@@ -22,6 +24,8 @@ type Config struct {
 	Key            string `env:"KEY"`
 	LogLevel       string
 	Host           string
+	CryptoKey      string `env:"CRYPTO_KEY"` // CryptoKey public key file path.
+	PublicKey      *rsa.PublicKey
 }
 
 func NewConfig() (*Config, error) {
@@ -32,6 +36,7 @@ func NewConfig() (*Config, error) {
 	flag.StringVar(&cfg.LogLevel, "L", "info", "log level")
 	flag.IntVar(&cfg.RateLimit, "l", 1, "rate limit")
 	flag.StringVar(&cfg.Key, "k", "", "hashing key")
+	flag.StringVar(&cfg.CryptoKey, "crypto-key", "", "public key file path")
 	flag.Parse()
 	err := env.Parse(&cfg)
 	if err != nil {
@@ -43,5 +48,6 @@ func NewConfig() (*Config, error) {
 		port = address[1]
 	}
 	cfg.Host = "http://localhost:" + port
+	cfg.PublicKey = cert.PublicKey(cfg.CryptoKey)
 	return &cfg, nil
 }
