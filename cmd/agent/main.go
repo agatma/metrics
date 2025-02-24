@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"metrics/internal/agent/adapters/storage"
 	"metrics/internal/agent/adapters/storage/memory"
@@ -43,6 +46,12 @@ func run() error {
 	}
 	agentMetricService := service.NewAgentMetricService(gaugeAgentStorage, counterAgentStorage)
 	worker := workers.NewAgentWorker(agentMetricService, cfg)
+	sigint := make(chan os.Signal, 1)
+	signal.Notify(sigint, os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT)
+	go func() {
+		<-sigint
+		cancel()
+	}()
 	if err = worker.Run(ctx); err != nil {
 		return fmt.Errorf("server has failed: %w", err)
 	}

@@ -69,8 +69,8 @@ type API struct {
 // Run starts the HTTP server.
 func (a *API) Run() error {
 	sigint := make(chan os.Signal, 1)
+	// Graceful shutdown of server
 	signal.Notify(sigint, os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT)
-
 	go func() {
 		<-sigint
 		if err := a.srv.Shutdown(context.Background()); err != nil {
