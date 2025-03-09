@@ -69,12 +69,12 @@ type API struct {
 // Run starts the HTTP server.
 func (a *API) Run() error {
 	sigint := make(chan os.Signal, 1)
+	// Graceful shutdown of server
 	signal.Notify(sigint, os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT)
-
 	go func() {
 		<-sigint
 		if err := a.srv.Shutdown(context.Background()); err != nil {
-			logger.Log.Info("server shutdown: ", zap.Error(err))
+			logger.Log.Info("server shutdown gracefully: ", zap.Error(err))
 		}
 	}()
 	if err := a.srv.ListenAndServe(); err != nil {
@@ -93,7 +93,8 @@ func NewAPI(metricService MetricService, cfg *config.Config) *API {
 	r := chi.NewRouter()
 
 	r.Use(h.LoggingRequestMiddleware)
-	r.Use(h.WithHash)
+	r.Use(h.DecryptMiddleware)
+	r.Use(h.WithHashMiddleware)
 	r.Use(h.CompressRequestMiddleware)
 	r.Use(h.CompressResponseMiddleware)
 	r.Use(middleware.Timeout(serverTimeout * time.Second))

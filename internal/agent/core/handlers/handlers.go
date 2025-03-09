@@ -2,6 +2,8 @@
 package handlers
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -49,6 +51,13 @@ func SendMetrics(cfg *config.Config, request *domain.MetricRequestJSON) error {
 		SetHeader("Accept-Encoding", `gzip`)
 	if cfg.Key != "" {
 		req.SetHeader(hash.Header, hash.Encode(buf, cfg.Key))
+	}
+	if cfg.PublicKey != nil {
+		req.SetHeader("Encrypted", "crypto/rsa")
+		buf, err = rsa.EncryptPKCS1v15(rand.Reader, cfg.PublicKey, buf)
+		if err != nil {
+			return fmt.Errorf("failed to encrypt data: %w", err)
+		}
 	}
 	resp, err := req.SetBody(buf).Post(cfg.Host + "/update/")
 	if err != nil {
