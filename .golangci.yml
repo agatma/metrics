@@ -503,7 +503,6 @@ linters:
     - mirror
     - musttag
     - nilerr
-    - nilnil
     - nolintlint
     - nosprintfhostport
     - perfsprint
