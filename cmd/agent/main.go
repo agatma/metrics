@@ -16,6 +16,12 @@ import (
 	"metrics/internal/agent/logger"
 )
 
+var (
+	buildVersion = "N/A"
+	buildDate    = "N/A"
+	buildCommit  = "N/A"
+)
+
 func main() {
 	if err := run(); err != nil {
 		log.Fatal(err)
@@ -32,6 +38,7 @@ func run() error {
 	if err = logger.Initialize(cfg.LogLevel); err != nil {
 		return fmt.Errorf("can't load logger: %w", err)
 	}
+	logger.Log.Info(fmt.Sprintf("version=%s, date=%s, commit=%s\n", buildVersion, buildDate, buildCommit))
 	gaugeAgentStorage, err := storage.NewAgentStorage(storage.Config{
 		Memory: &memory.Config{},
 	})
