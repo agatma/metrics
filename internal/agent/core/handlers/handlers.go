@@ -13,6 +13,9 @@ import (
 
 	"metrics/internal/agent/config"
 	"metrics/internal/agent/core/domain"
+
+	"github.com/go-http-utils/headers"
+
 	"metrics/internal/agent/logger"
 	"metrics/internal/shared-kernel/compress"
 	"metrics/internal/shared-kernel/hash"
@@ -46,9 +49,10 @@ func SendMetrics(cfg *config.Config, request *domain.MetricRequestJSON) error {
 	}
 	client := resty.New()
 	req := client.R().
-		SetHeader("Content-Type", `application/json`).
-		SetHeader("Content-Encoding", `gzip`).
-		SetHeader("Accept-Encoding", `gzip`)
+		SetHeader(headers.ContentType, `application/json`).
+		SetHeader(headers.ContentEncoding, `gzip`).
+		SetHeader(headers.AcceptEncoding, `gzip`).
+		SetHeader(headers.XRealIP, cfg.LocalIP)
 	if cfg.Key != "" {
 		req.SetHeader(hash.Header, hash.Encode(buf, cfg.Key))
 	}

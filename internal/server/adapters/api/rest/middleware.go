@@ -7,10 +7,12 @@ import (
 	"crypto/rsa"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/go-http-utils/headers"
 	"go.uber.org/zap"
 
 	"metrics/internal/server/logger"
@@ -77,7 +79,7 @@ func (h *Handler) LoggingRequestMiddleware(next http.Handler) http.Handler {
 // CompressRequestMiddleware compresses incoming HTTP requests.
 func (h *Handler) CompressRequestMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !strings.Contains(r.Header.Get("Content-Encoding"), "gzip") {
+		if !strings.Contains(r.Header.Get(headers.ContentEncoding), "gzip") {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -104,7 +106,7 @@ func (h *Handler) CompressRequestMiddleware(next http.Handler) http.Handler {
 // CompressResponseMiddleware compresses outgoing HTTP responses.
 func (h *Handler) CompressResponseMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !strings.Contains(r.Header.Get("Accept-Encoding"), `gzip`) {
+		if !strings.Contains(r.Header.Get(headers.AcceptEncoding), `gzip`) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -164,6 +166,20 @@ func (h *Handler) DecryptMiddleware(next http.Handler) http.Handler {
 				return
 			}
 			r.Body = io.NopCloser(bytes.NewReader(decrypted))
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// CIDRMiddleware Classless Inter-Domain Routing.
+func (h *Handler) CIDRMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if h.config.Subnet != nil {
+			agentIP := net.ParseIP(r.Header.Get(headers.XRealIP))
+			if agentIP == nil || !h.config.Subnet.Contains(agentIP) {
+				w.WriteHeader(http.StatusForbidden)
+				return
+			}
 		}
 		next.ServeHTTP(w, r)
 	})

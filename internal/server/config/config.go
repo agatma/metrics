@@ -4,9 +4,10 @@ package config
 import (
 	"crypto/rsa"
 	"encoding/json"
+	"errors"
 	"flag"
-	"fmt"
 	"metrics/internal/shared-kernel/cert"
+	"net"
 	"os"
 
 	"github.com/caarlos0/env/v11"
@@ -26,7 +27,9 @@ type Config struct {
 	LogLevel        string          `json:"log_level"`
 	CryptoKey       string          `env:"CRYPTO_KEY" json:"crypto_key"`
 	Config          string          `env:"CONFIG" json:"config"`
-	PrivateKey      *rsa.PrivateKey `json:"private_key,omitempty"`
+	TrustedSubnet   string          `env:"TRUSTED_SUBNET" json:"trusted_subnet"`
+	PrivateKey      *rsa.PrivateKey `json:"-"`
+	Subnet          *net.IPNet      `json:"-"`
 }
 
 func NewConfig() (*Config, error) {
@@ -39,14 +42,21 @@ func NewConfig() (*Config, error) {
 	flag.BoolVar(&cfg.Restore, "r", true, "recover data from files")
 	flag.StringVar(&cfg.LogLevel, "l", "info", "log level")
 	flag.StringVar(&cfg.CryptoKey, "crypto-key", "", "public key file path")
+	flag.StringVar(&cfg.TrustedSubnet, "t", "", "CIDR")
 	flag.StringVar(&cfg.Config, "c", "./configs/agent.json", "agent config file path")
 	flag.Parse()
 
 	err := env.Parse(&cfg)
 	if err != nil {
-		return &cfg, fmt.Errorf("failed to get config for server: %w", err)
+		return &cfg, errors.New("failed to get config for server")
 	}
 	cfg.PrivateKey = cert.PrivateKey(cfg.CryptoKey)
+	if cfg.TrustedSubnet != "" {
+		_, cfg.Subnet, err = net.ParseCIDR(cfg.TrustedSubnet)
+		if err != nil {
+			return &cfg, errors.New("failed to parse trusted subnet")
+		}
+	}
 	return &cfg, nil
 }
 
