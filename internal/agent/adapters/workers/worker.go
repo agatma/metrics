@@ -26,10 +26,10 @@ type AgentMetricService interface {
 	CollectMetrics(pollCount int) error
 
 	// ReportMetrics reports collected metrics to the channel.
-	ReportMetrics(jobs chan<- domain.MetricRequestJSON) error
+	ReportMetrics(jobs chan<- domain.WorkerMetricRequest) error
 
 	// SendMetrics sends reported metrics asynchronously.
-	SendMetrics(ctx context.Context, cfg *config.Config, jobs <-chan domain.MetricRequestJSON) error
+	SendMetrics(ctx context.Context, cfg *config.Config, jobs <-chan domain.WorkerMetricRequest) error
 }
 
 // AgentWorker manages the collection, reporting, and sending of metrics.
@@ -69,7 +69,7 @@ func (a *AgentWorker) collectMetrics(ctx context.Context) error {
 }
 
 // reportMetrics runs in a separate goroutine to continuously report collected metrics.
-func (a *AgentWorker) reportMetrics(ctx context.Context, jobs chan<- domain.MetricRequestJSON) error {
+func (a *AgentWorker) reportMetrics(ctx context.Context, jobs chan<- domain.WorkerMetricRequest) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -96,7 +96,7 @@ func (a *AgentWorker) reportMetrics(ctx context.Context, jobs chan<- domain.Metr
 // Run starts the worker and manages its lifecycle.
 func (a *AgentWorker) Run(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
-	jobs := make(chan domain.MetricRequestJSON, metrics)
+	jobs := make(chan domain.WorkerMetricRequest, metrics)
 
 	go func() {
 		if err := a.collectMetrics(ctx); err != nil {

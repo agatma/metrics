@@ -155,7 +155,7 @@ func (a *AgentMetricService) getAllMetrics(request *domain.GetAllMetricsRequest)
 }
 
 // ReportMetrics sends collected metrics to the configured destination.
-func (a *AgentMetricService) ReportMetrics(jobs chan<- domain.MetricRequestJSON) error {
+func (a *AgentMetricService) ReportMetrics(jobs chan<- domain.WorkerMetricRequest) error {
 	response := a.getAllMetrics(&domain.GetAllMetricsRequest{
 		MetricType: domain.Gauge,
 	})
@@ -170,7 +170,7 @@ func (a *AgentMetricService) ReportMetrics(jobs chan<- domain.MetricRequestJSON)
 			logger.Log.Error("error occurred during parsing gauge metrics", zap.Error(err))
 			return fmt.Errorf("error occurred during parsing gauge metrics: %w", err)
 		}
-		request := domain.MetricRequestJSON{
+		request := domain.WorkerMetricRequest{
 			ID:    metricName,
 			MType: domain.Gauge,
 			Value: &gaugeValue,
@@ -193,7 +193,7 @@ func (a *AgentMetricService) ReportMetrics(jobs chan<- domain.MetricRequestJSON)
 			return fmt.Errorf("error occurred during parsing counter metrics: %w", err)
 		}
 		counterInt64Value := int64(counterValue)
-		request := domain.MetricRequestJSON{
+		request := domain.WorkerMetricRequest{
 			ID:    metricName,
 			MType: domain.Counter,
 			Delta: &counterInt64Value,
@@ -209,7 +209,7 @@ func (a *AgentMetricService) ReportMetrics(jobs chan<- domain.MetricRequestJSON)
 func (a *AgentMetricService) SendMetrics(
 	ctx context.Context,
 	cfg *config.Config,
-	jobs <-chan domain.MetricRequestJSON,
+	jobs <-chan domain.WorkerMetricRequest,
 ) error {
 	var err error
 	for {
