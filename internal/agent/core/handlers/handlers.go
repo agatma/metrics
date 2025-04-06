@@ -23,13 +23,13 @@ import (
 
 // SendMetrics sends metrics to the configured endpoint.
 //
-// This function marshals the provided WorkerMetricRequest, compresses the data,
+// This function marshals the provided Metric, compresses the data,
 // and sends it to the specified host using RESTy.
 //
 // Args:
 //
 //	cfg *config.Config: Configuration object containing host and key information.
-//	request *domain.WorkerMetricRequest: Request containing metric data.
+//	request *domain.Metric: Request containing metric data.
 //
 // Returns:
 //
@@ -38,7 +38,7 @@ import (
 // Side effects:
 //   - Sends HTTP POST request to the configured endpoint.
 //   - Logs the request details if successful.
-func SendMetrics(cfg *config.Config, request *domain.WorkerMetricRequest) error {
+func SendMetrics(cfg *config.Config, request *domain.Metric) error {
 	data, err := json.Marshal(request)
 	if err != nil {
 		return fmt.Errorf("failed to parse model: %w", err)
