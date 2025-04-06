@@ -222,10 +222,16 @@ func (a *AgentMetricService) SendMetrics(
 			}
 			err = retry.Do(
 				func() error {
-					err = handlers.SendMetrics(cfg, &req)
-					if err != nil {
-						logger.Log.Error("error occurred during sending metrics", zap.Error(err))
-						return fmt.Errorf("failed to send metrics: %w", err)
+					if cfg.UseGRPC {
+						if err = handlers.SendMetricGRPC(cfg, &req); err != nil {
+							logger.Log.Error("grpc error occurred during sending metrics", zap.Error(err))
+							return fmt.Errorf("failed to send metrics through grpc: %w", err)
+						}
+						return nil
+					}
+					if err = handlers.SendMetricHTTP(cfg, &req); err != nil {
+						logger.Log.Error("http error occurred during sending metrics", zap.Error(err))
+						return fmt.Errorf("failed to send metrics through http: %w", err)
 					}
 					return nil
 				},
@@ -234,8 +240,8 @@ func (a *AgentMetricService) SendMetrics(
 				retry.OnRetry(retrying.OnRetry),
 			)
 			if err != nil {
-				logger.Log.Error("error occurred during sending metrics", zap.Error(err))
-				return fmt.Errorf("failed to send metrics: %w", err)
+				logger.Log.Error("error occurred during sending metric", zap.Error(err))
+				return fmt.Errorf("failed to send metric: %w", err)
 			}
 		}
 	}

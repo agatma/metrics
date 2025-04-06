@@ -6,7 +6,7 @@ option go_package = "internal/proto";
 
 
 service MetricService {
-  rpc Update(MetricRequest) returns (MetricResponse);
+  rpc Update(Metric) returns (MetricResponse);
 }
 
 message Metric {
@@ -18,10 +18,6 @@ message Metric {
   Type type = 2;
   int64 delta = 3;
   double value = 4;
-}
-
-message MetricRequest {
-  repeated Metric metrics = 1;
 }
 
 message MetricResponse {

@@ -28,6 +28,8 @@ type Config struct {
 	CryptoKey       string          `env:"CRYPTO_KEY" json:"crypto_key"`
 	Config          string          `env:"CONFIG" json:"config"`
 	TrustedSubnet   string          `env:"TRUSTED_SUBNET" json:"trusted_subnet"`
+	UseGRPC         bool            `env:"USE_GRPC"`
+	GRPCPort        int             `env:"GRPC_PORT"`
 	PrivateKey      *rsa.PrivateKey `json:"-"`
 	Subnet          *net.IPNet      `json:"-"`
 }
@@ -43,6 +45,8 @@ func NewConfig() (*Config, error) {
 	flag.StringVar(&cfg.LogLevel, "l", "info", "log level")
 	flag.StringVar(&cfg.CryptoKey, "crypto-key", "", "public key file path")
 	flag.StringVar(&cfg.TrustedSubnet, "t", "", "CIDR")
+	flag.BoolVar(&cfg.UseGRPC, "grpc", false, "using GRPC server")
+	flag.IntVar(&cfg.GRPCPort, "gp", 3200, "GRPC port")
 	flag.StringVar(&cfg.Config, "c", "./configs/agent.json", "agent config file path")
 	flag.Parse()
 

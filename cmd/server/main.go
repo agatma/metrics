@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"metrics/internal/server/adapters/api/rest"
+	gs "metrics/internal/server/adapters/grpc"
 	"metrics/internal/server/adapters/storage"
 	"metrics/internal/server/adapters/storage/file"
 	"metrics/internal/server/adapters/storage/memory"
@@ -60,18 +61,24 @@ func run() error {
 			}
 		}()
 	}
-	api := rest.NewAPI(metricService, cfg)
-	if err = api.Run(); err != nil {
-		if errors.Is(err, http.ErrServerClosed) {
-			err = metricService.SaveMetrics()
-			if err != nil {
-				return fmt.Errorf("failed to save metrics during shutdown: %w", err)
-			}
-			logger.Log.Info("metrics are saved to file")
-			return nil
+	if cfg.UseGRPC {
+		grpcServer := gs.NewGRPC(metricService, cfg)
+		if err := grpcServer.Run(); err != nil {
+			return fmt.Errorf("failed to start gRPC server: %w", err)
 		}
-
-		return fmt.Errorf("server has failed: %w", err)
+	} else {
+		api := rest.NewAPI(metricService, cfg)
+		if err = api.Run(); err != nil {
+			if errors.Is(err, http.ErrServerClosed) {
+				err = metricService.SaveMetrics()
+				if err != nil {
+					return fmt.Errorf("failed to save metrics during shutdown: %w", err)
+				}
+				logger.Log.Info("metrics are saved to file")
+				return nil
+			}
+			return fmt.Errorf("server has failed: %w", err)
+		}
 	}
 	return nil
 }

@@ -26,7 +26,7 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type MetricServiceClient interface {
-	Update(ctx context.Context, in *MetricRequest, opts ...grpc.CallOption) (*MetricResponse, error)
+	Update(ctx context.Context, in *Metric, opts ...grpc.CallOption) (*MetricResponse, error)
 }
 
 type metricServiceClient struct {
@@ -37,7 +37,7 @@ func NewMetricServiceClient(cc grpc.ClientConnInterface) MetricServiceClient {
 	return &metricServiceClient{cc}
 }
 
-func (c *metricServiceClient) Update(ctx context.Context, in *MetricRequest, opts ...grpc.CallOption) (*MetricResponse, error) {
+func (c *metricServiceClient) Update(ctx context.Context, in *Metric, opts ...grpc.CallOption) (*MetricResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(MetricResponse)
 	err := c.cc.Invoke(ctx, MetricService_Update_FullMethodName, in, out, cOpts...)
@@ -51,7 +51,7 @@ func (c *metricServiceClient) Update(ctx context.Context, in *MetricRequest, opt
 // All implementations must embed UnimplementedMetricServiceServer
 // for forward compatibility.
 type MetricServiceServer interface {
-	Update(context.Context, *MetricRequest) (*MetricResponse, error)
+	Update(context.Context, *Metric) (*MetricResponse, error)
 	mustEmbedUnimplementedMetricServiceServer()
 }
 
@@ -62,7 +62,7 @@ type MetricServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedMetricServiceServer struct{}
 
-func (UnimplementedMetricServiceServer) Update(context.Context, *MetricRequest) (*MetricResponse, error) {
+func (UnimplementedMetricServiceServer) Update(context.Context, *Metric) (*MetricResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Update not implemented")
 }
 func (UnimplementedMetricServiceServer) mustEmbedUnimplementedMetricServiceServer() {}
@@ -87,7 +87,7 @@ func RegisterMetricServiceServer(s grpc.ServiceRegistrar, srv MetricServiceServe
 }
 
 func _MetricService_Update_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(MetricRequest)
+	in := new(Metric)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -99,7 +99,7 @@ func _MetricService_Update_Handler(srv interface{}, ctx context.Context, dec fun
 		FullMethod: MetricService_Update_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MetricServiceServer).Update(ctx, req.(*MetricRequest))
+		return srv.(MetricServiceServer).Update(ctx, req.(*Metric))
 	}
 	return interceptor(ctx, in, info, handler)
 }
