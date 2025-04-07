@@ -155,7 +155,7 @@ func (a *AgentMetricService) getAllMetrics(request *domain.GetAllMetricsRequest)
 }
 
 // ReportMetrics sends collected metrics to the configured destination.
-func (a *AgentMetricService) ReportMetrics(jobs chan<- domain.MetricRequestJSON) error {
+func (a *AgentMetricService) ReportMetrics(jobs chan<- domain.Metric) error {
 	response := a.getAllMetrics(&domain.GetAllMetricsRequest{
 		MetricType: domain.Gauge,
 	})
@@ -170,7 +170,7 @@ func (a *AgentMetricService) ReportMetrics(jobs chan<- domain.MetricRequestJSON)
 			logger.Log.Error("error occurred during parsing gauge metrics", zap.Error(err))
 			return fmt.Errorf("error occurred during parsing gauge metrics: %w", err)
 		}
-		request := domain.MetricRequestJSON{
+		request := domain.Metric{
 			ID:    metricName,
 			MType: domain.Gauge,
 			Value: &gaugeValue,
@@ -193,7 +193,7 @@ func (a *AgentMetricService) ReportMetrics(jobs chan<- domain.MetricRequestJSON)
 			return fmt.Errorf("error occurred during parsing counter metrics: %w", err)
 		}
 		counterInt64Value := int64(counterValue)
-		request := domain.MetricRequestJSON{
+		request := domain.Metric{
 			ID:    metricName,
 			MType: domain.Counter,
 			Delta: &counterInt64Value,
@@ -209,7 +209,7 @@ func (a *AgentMetricService) ReportMetrics(jobs chan<- domain.MetricRequestJSON)
 func (a *AgentMetricService) SendMetrics(
 	ctx context.Context,
 	cfg *config.Config,
-	jobs <-chan domain.MetricRequestJSON,
+	jobs <-chan domain.Metric,
 ) error {
 	var err error
 	for {
@@ -222,10 +222,16 @@ func (a *AgentMetricService) SendMetrics(
 			}
 			err = retry.Do(
 				func() error {
-					err = handlers.SendMetrics(cfg, &req)
-					if err != nil {
-						logger.Log.Error("error occurred during sending metrics", zap.Error(err))
-						return fmt.Errorf("failed to send metrics: %w", err)
+					if cfg.UseGRPC {
+						if err = handlers.SendMetricGRPC(cfg, &req); err != nil {
+							logger.Log.Error("grpc error occurred during sending metrics", zap.Error(err))
+							return fmt.Errorf("failed to send metrics through grpc: %w", err)
+						}
+						return nil
+					}
+					if err = handlers.SendMetricHTTP(cfg, &req); err != nil {
+						logger.Log.Error("http error occurred during sending metrics", zap.Error(err))
+						return fmt.Errorf("failed to send metrics through http: %w", err)
 					}
 					return nil
 				},
@@ -234,8 +240,8 @@ func (a *AgentMetricService) SendMetrics(
 				retry.OnRetry(retrying.OnRetry),
 			)
 			if err != nil {
-				logger.Log.Error("error occurred during sending metrics", zap.Error(err))
-				return fmt.Errorf("failed to send metrics: %w", err)
+				logger.Log.Error("error occurred during sending metric", zap.Error(err))
+				return fmt.Errorf("failed to send metric: %w", err)
 			}
 		}
 	}

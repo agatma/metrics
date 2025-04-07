@@ -2,6 +2,7 @@
 package handlers
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/json"
@@ -13,20 +14,24 @@ import (
 
 	"metrics/internal/agent/config"
 	"metrics/internal/agent/core/domain"
+
+	"github.com/go-http-utils/headers"
+
 	"metrics/internal/agent/logger"
+	pb "metrics/internal/proto"
 	"metrics/internal/shared-kernel/compress"
 	"metrics/internal/shared-kernel/hash"
 )
 
-// SendMetrics sends metrics to the configured endpoint.
+// SendMetricHTTP sends metrics to the configured endpoint.
 //
-// This function marshals the provided MetricRequestJSON, compresses the data,
+// This function marshals the provided Metric, compresses the data,
 // and sends it to the specified host using RESTy.
 //
 // Args:
 //
 //	cfg *config.Config: Configuration object containing host and key information.
-//	request *domain.MetricRequestJSON: Request containing metric data.
+//	request *domain.Metric: Request containing metric data.
 //
 // Returns:
 //
@@ -35,7 +40,7 @@ import (
 // Side effects:
 //   - Sends HTTP POST request to the configured endpoint.
 //   - Logs the request details if successful.
-func SendMetrics(cfg *config.Config, request *domain.MetricRequestJSON) error {
+func SendMetricHTTP(cfg *config.Config, request *domain.Metric) error {
 	data, err := json.Marshal(request)
 	if err != nil {
 		return fmt.Errorf("failed to parse model: %w", err)
@@ -46,9 +51,10 @@ func SendMetrics(cfg *config.Config, request *domain.MetricRequestJSON) error {
 	}
 	client := resty.New()
 	req := client.R().
-		SetHeader("Content-Type", `application/json`).
-		SetHeader("Content-Encoding", `gzip`).
-		SetHeader("Accept-Encoding", `gzip`)
+		SetHeader(headers.ContentType, `application/json`).
+		SetHeader(headers.ContentEncoding, `gzip`).
+		SetHeader(headers.AcceptEncoding, `gzip`).
+		SetHeader(headers.XRealIP, cfg.LocalIP)
 	if cfg.Key != "" {
 		req.SetHeader(hash.Header, hash.Encode(buf, cfg.Key))
 	}
@@ -73,5 +79,41 @@ func SendMetrics(cfg *config.Config, request *domain.MetricRequestJSON) error {
 		zap.Int("statusCode", resp.StatusCode()),
 		zap.Duration("duration", resp.Time()),
 	)
+	return nil
+}
+
+// SendMetricGRPC sends metrics to the configured endpoint.
+//
+// This function marshals the provided Metric, compresses the data,
+// and sends it to the specified host using RESTy.
+//
+// Args:
+//
+//	cfg *config.Config: Configuration object containing host and key information.
+//	request *domain.Metric: Request containing metric data.
+//
+// Returns:
+//
+//	error: Any error that occurs during the process.
+//
+// Side effects:
+//   - Sends GRPC request to the configured endpoint.
+func SendMetricGRPC(cfg *config.Config, request *domain.Metric) error {
+	var metric pb.Metric
+	metric.Id = request.ID
+	if request.MType == domain.Gauge {
+		metric.Type = pb.Metric_GAUGE
+		metric.Value = *request.Value
+	} else {
+		metric.Type = pb.Metric_COUNTER
+		metric.Delta = *request.Delta
+	}
+	resp, err := cfg.GRPCClient.Update(context.Background(), &metric)
+	if err != nil {
+		return err
+	}
+	if resp.Status != 0 {
+		return fmt.Errorf(`unexpected status code %d`, resp.Status)
+	}
 	return nil
 }

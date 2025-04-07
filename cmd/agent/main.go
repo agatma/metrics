@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	pb "metrics/internal/proto"
 	"os"
 	"os/signal"
 	"syscall"
@@ -14,6 +15,10 @@ import (
 	"metrics/internal/agent/config"
 	"metrics/internal/agent/core/service"
 	"metrics/internal/agent/logger"
+
+	"go.uber.org/zap"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 func main() {
@@ -45,6 +50,20 @@ func run() error {
 		return fmt.Errorf("failed to initialize a storage: %w", err)
 	}
 	agentMetricService := service.NewAgentMetricService(gaugeAgentStorage, counterAgentStorage)
+	if cfg.UseGRPC {
+		conn, err := grpc.NewClient(
+			fmt.Sprintf(":%d", cfg.GRPCPort), grpc.WithTransportCredentials(insecure.NewCredentials()),
+		)
+		if err != nil {
+			return fmt.Errorf("can't dial grpc server: %w", err)
+		}
+		cfg.GRPCClient = pb.NewMetricServiceClient(conn)
+		defer func() {
+			if err = conn.Close(); err != nil {
+				logger.Log.Error("error occurred during closing grpc connection", zap.Error(err))
+			}
+		}()
+	}
 	worker := workers.NewAgentWorker(agentMetricService, cfg)
 	sigint := make(chan os.Signal, 1)
 	signal.Notify(sigint, os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT)

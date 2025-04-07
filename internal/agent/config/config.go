@@ -4,9 +4,12 @@ package config
 import (
 	"crypto/rsa"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
+	pb "metrics/internal/proto"
 	"metrics/internal/shared-kernel/cert"
+	"net"
 	"os"
 	"strings"
 
@@ -19,16 +22,20 @@ const (
 )
 
 type Config struct {
-	Address        string         `env:"ADDRESS" json:"address"`
-	ReportInterval int            `env:"REPORT_INTERVAL" json:"report_interval"`
-	PollInterval   int            `env:"POLL_INTERVAL" json:"poll_interval"`
-	RateLimit      int            `env:"RATE_LIMIT" json:"rate_limit"`
-	Key            string         `env:"KEY" json:"key"`
-	LogLevel       string         `json:"log_level"`
-	Host           string         `json:"host"`
-	CryptoKey      string         `env:"CRYPTO_KEY" json:"crypto_key"`
-	Config         string         `env:"CONFIG" json:"config"`
-	PublicKey      *rsa.PublicKey `json:"public_key,omitempty"`
+	Address        string `env:"ADDRESS" json:"address"`
+	ReportInterval int    `env:"REPORT_INTERVAL" json:"report_interval"`
+	PollInterval   int    `env:"POLL_INTERVAL" json:"poll_interval"`
+	RateLimit      int    `env:"RATE_LIMIT" json:"rate_limit"`
+	Key            string `env:"KEY" json:"key"`
+	LogLevel       string `json:"log_level"`
+	LocalIP        string `env:"LOCAL_IP" json:"-"`
+	Host           string `json:"host"`
+	CryptoKey      string `env:"CRYPTO_KEY" json:"crypto_key"`
+	Config         string `env:"CONFIG" json:"config"`
+	UseGRPC        bool   `env:"GRPC"`
+	GRPCPort       int    `env:"GRPC_PORT"`
+	GRPCClient     pb.MetricServiceClient
+	PublicKey      *rsa.PublicKey `json:"-"`
 }
 
 func NewConfig() (*Config, error) {
@@ -41,6 +48,8 @@ func NewConfig() (*Config, error) {
 	flag.StringVar(&cfg.Key, "k", "", "hashing key")
 	flag.StringVar(&cfg.CryptoKey, "crypto-key", "", "public key file path")
 	flag.StringVar(&cfg.Config, "c", "./configs/agent.json", "agent config file path")
+	flag.BoolVar(&cfg.UseGRPC, "grpc", false, "using GRPC client")
+	flag.IntVar(&cfg.GRPCPort, "gp", 3200, "GRPC port")
 	flag.Parse()
 	err := env.Parse(&cfg)
 	if err != nil {
@@ -50,6 +59,9 @@ func NewConfig() (*Config, error) {
 	port := "8080"
 	if len(address) > 1 {
 		port = address[1]
+	}
+	if cfg.LocalIP, err = getLocalIP(cfg.Address); err != nil {
+		return &cfg, fmt.Errorf("failed to get local ip: %w", err)
 	}
 	cfg.Host = "http://localhost:" + port
 	cfg.PublicKey = cert.PublicKey(cfg.CryptoKey)
@@ -70,4 +82,16 @@ func getJSONConfig() Config {
 		return cfg
 	}
 	return cfg
+}
+
+func getLocalIP(serverIP string) (string, error) {
+	conn, err := net.Dial("udp", serverIP)
+	if err != nil {
+		return "", fmt.Errorf("failed to connect to local ip: %w", err)
+	}
+	if udpAddr, ok := conn.LocalAddr().(*net.UDPAddr); !ok {
+		return "", errors.New("failed to assert local ip address")
+	} else {
+		return udpAddr.IP.String(), nil
+	}
 }
